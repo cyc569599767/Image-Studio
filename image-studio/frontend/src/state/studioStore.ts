@@ -473,7 +473,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       progress: null,
       logLines: [],
       isRunning: true,
-      jobsTotal: s.batchCount,
+      jobsTotal: 1,
       jobsCompleted: 0,
       runningJobs: [],
     });
@@ -511,24 +511,18 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     }
     set({ lastPayload: basePayload });
 
-    const launches: Promise<void>[] = [];
-    for (let i = 0; i < s.batchCount; i++) {
-      const jobSeed = s.batchCount > 1 && i > 0
-        ? Math.floor(Math.random() * 2_000_000_000)
-        : (s.seed || (s.batchCount > 1 ? Math.floor(Math.random() * 2_000_000_000) : 0));
-      const p: backend.GenerateOptions = { ...basePayload, seed: jobSeed };
-      launches.push(launchOneJob(s.mode, p, {
-        size: s.size,
-        quality: s.quality,
-        sources: s.sources,
-        currentImage: s.currentImage,
-        styleTag: s.styleTag,
-        transport: s.transport,
-      }));
-    }
-    // Don't await — the function returns once jobs are launched. Per-job
-    // completion is handled inside launchOneJob via EventsOn.
-    void Promise.all(launches);
+    // 单张生成。批量生图(batchCount>1)已下架 —— 上游中转站对并发不友好,
+    // 多个 SSE 流并行常会被节流/截断。如果将来恢复,for 循环回来即可。
+    const jobSeed = s.seed || 0;
+    const p: backend.GenerateOptions = { ...basePayload, seed: jobSeed };
+    void launchOneJob(s.mode, p, {
+      size: s.size,
+      quality: s.quality,
+      sources: s.sources,
+      currentImage: s.currentImage,
+      styleTag: s.styleTag,
+      transport: s.transport,
+    });
   },
 
   cancel: async () => {

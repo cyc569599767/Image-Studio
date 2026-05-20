@@ -34,7 +34,7 @@ const QUALITY_TIERS: { value: QualityValue; label: string }[] = [
 
 export function ControlPanel() {
   const {
-    apiKey, mode, prompt, negativePrompt, size, quality, seed, batchCount, styleTag,
+    apiKey, mode, prompt, negativePrompt, size, quality, seed, styleTag,
     sources, currentImage,
     errorMessage, isRunning, lastPayload, isTestingKey,
     apiMode, baseURL, responsesConfig, imagesConfig, openUpstreamConfig,
@@ -155,21 +155,6 @@ export function ControlPanel() {
               onClick={() => setField("quality", q.value as QualityValue)}
             >
               {q.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <label className="head">数量</label>
-        <div className="seg">
-          {[1, 2, 4, 8].map((n) => (
-            <button
-              key={n}
-              className={`seg-item ${batchCount === n ? "active" : ""}`}
-              onClick={() => setField("batchCount", n)}
-            >
-              {n}
             </button>
           ))}
         </div>
@@ -325,7 +310,7 @@ export function ControlPanel() {
             onClick={submit}
             disabled={!apiKey || !prompt}
           >
-            {mode === "edit" ? "编辑" : "生成"} {batchCount} 张
+            {mode === "edit" ? "编辑" : "生成"}
           </button>
         )}
         {(!apiKey || !baseURL) && (
