@@ -11,6 +11,7 @@ export function Toolbar() {
     resetMask, clearAnnotations,
     undoStack, redoStack, undo, redo,
     rotateCurrent, flipCurrent, cropToRect,
+    openResultDetail,
   } = useStudioStore();
   const selRect = annotations.find((a) => a.id === selectedAnnotationId && a.kind === "rect");
 
@@ -165,6 +166,13 @@ export function Toolbar() {
         </button>
         {currentImage && (
           <>
+            <button
+              className="tool-btn"
+              onClick={() => openResultDetail(currentImage)}
+              title="查看本张图的详细信息(参数 / prompt / 修订 / 文件路径)"
+            >
+              ℹ 详情
+            </button>
             <button
               className="tool-btn"
               onClick={() => setField("currentImage", null)}

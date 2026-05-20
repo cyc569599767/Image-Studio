@@ -23,6 +23,7 @@ export function HistoryRail() {
     history, currentImage, reuseAsSource, deleteHistoryItem, setField,
     compareB, setCompareB, pushToast, fullscreen,
     applyHistoryParams, regenerateFromHistory,
+    openResultDetail,
   } = useStudioStore();
 
   const [q, setQ] = useState("");
@@ -45,8 +46,14 @@ export function HistoryRail() {
   function buildMenu(h: HistoryItem): MenuItem[] {
     return [
       {
+        label: "详情",
+        icon: "ℹ",
+        onClick: () => openResultDetail(h),
+      },
+      {
         label: "复制 prompt",
         icon: "📋",
+        separatorBefore: true,
         onClick: () => navigator.clipboard.writeText(h.prompt ?? "").then(
           () => pushToast("已复制 prompt", "success"),
           () => pushToast("复制失败", "error"),

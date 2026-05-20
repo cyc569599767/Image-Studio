@@ -100,6 +100,8 @@ export interface Toast {
   createdAt: number;
   // Auto-dismiss timeout in ms; 0 = sticky (manual close only).
   ttl: number;
+  // 可选 CTA。点击触发 onClick 后 toast 自动关闭。
+  action?: { label: string; onClick: () => void };
 }
 
 export type AnnotationKind = "rect" | "arrow" | "text" | "freehand";

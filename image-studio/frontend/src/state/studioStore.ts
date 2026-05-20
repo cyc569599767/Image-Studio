@@ -198,8 +198,12 @@ interface StudioState {
   setCompareB: (item: HistoryItem | null) => void;
   setCompareSplit: (v: number) => void;
   importImageFile: (file: File) => Promise<void>;
-  pushToast: (text: string, kind?: Toast["kind"], ttl?: number) => void;
+  pushToast: (text: string, kind?: Toast["kind"], ttl?: number, action?: Toast["action"]) => void;
   dismissToast: (id: string) => void;
+  // 「查看详情」抽屉。打开时锁住当前 HistoryItem,不随 currentImage 切换变化。
+  resultDetail: HistoryItem | null;
+  openResultDetail: (item: HistoryItem) => void;
+  closeResultDetail: () => void;
   retryLast: () => Promise<void>;
   savePreset: (name: string) => void;
   applyPreset: (id: string) => void;
@@ -813,9 +817,9 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setCompareB: (item) => set({ compareB: item, compareSplit: 0.5 }),
   setCompareSplit: (v) => set({ compareSplit: Math.max(0, Math.min(1, v)) }),
 
-  pushToast: (text, kind = "info", ttl = 3500) => {
+  pushToast: (text, kind = "info", ttl = 3500, action) => {
     const id = genId();
-    const toast: Toast = { id, text, kind, createdAt: Date.now(), ttl };
+    const toast: Toast = { id, text, kind, createdAt: Date.now(), ttl, action };
     set({ toasts: [...get().toasts, toast] });
     if (ttl > 0) {
       setTimeout(() => {
@@ -824,6 +828,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     }
   },
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+
+  resultDetail: null,
+  openResultDetail: (item) => set({ resultDetail: item }),
+  closeResultDetail: () => set({ resultDetail: null }),
 
   rotateCurrent: async (degrees) => {
     const cur = get().currentImage;
@@ -1260,9 +1268,7 @@ async function launchOneJob(
       try {
         const elapsedSec = (Date.now() - startedAt) / 1000;
         const rd = [elapsedSec, ...store.getState().recentDurations].slice(0, 5);
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") {
-          tryNotify("Image Studio · 已完成", r.prompt ?? "");
-        }
+        const willNotify = typeof document !== "undefined" && document.visibilityState !== "visible";
         const item: HistoryItem = {
           id: cryptoIDFallback(),
           imageB64: r.imageB64,
@@ -1292,6 +1298,12 @@ async function launchOneJob(
           tool: "pan",
           recentDurations: rd,
         });
+        // 桌面通知 —— 点击拉前台 + 直达详情抽屉
+        if (willNotify) {
+          tryNotify("Image Studio · 已完成", r.prompt ?? "", () => {
+            store.getState().openResultDetail(item);
+          });
+        }
         const total = store.getState().jobsTotal;
         const completedAfter = store.getState().jobsCompleted + 1;
         store.getState().pushToast(
@@ -1299,6 +1311,8 @@ async function launchOneJob(
             ? `已完成 (${completedAfter}/${total}) · ${elapsedSec.toFixed(0)}s`
             : `已${item.mode === "edit" ? "编辑" : "生成"} · ${elapsedSec.toFixed(0)}s`,
           "success",
+          6000,
+          { label: "查看详情", onClick: () => store.getState().openResultDetail(item) },
         );
         removeFromRunning();
       } catch (err: any) {
@@ -1349,14 +1363,24 @@ function saveActiveWorkspaceSnapshot(s: StudioState): Workspace[] {
   });
 }
 
-function tryNotify(title: string, body: string) {
+function tryNotify(title: string, body: string, onClick?: () => void) {
   try {
     if (typeof Notification === "undefined") return;
+    const fire = () => {
+      const n = new Notification(title, { body });
+      if (onClick) {
+        n.onclick = () => {
+          try { window.focus(); } catch {}
+          onClick();
+          n.close();
+        };
+      }
+    };
     if (Notification.permission === "granted") {
-      new Notification(title, { body });
+      fire();
     } else if (Notification.permission === "default") {
       Notification.requestPermission().then((p) => {
-        if (p === "granted") new Notification(title, { body });
+        if (p === "granted") fire();
       });
     }
   } catch { /* ignore */ }

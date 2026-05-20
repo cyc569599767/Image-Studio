@@ -10,6 +10,7 @@ import { StatusBar } from "./components/canvas/StatusBar";
 import { HistoryRail } from "./components/history/HistoryRail";
 import { ToastContainer } from "./components/common/ToastContainer";
 import { UpstreamConfigModal } from "./components/panel/UpstreamConfigModal";
+import { ResultDetailDrawer } from "./components/panel/ResultDetailDrawer";
 import { useStudioStore } from "./state/studioStore";
 
 function App() {
@@ -134,6 +135,7 @@ function App() {
       </div>
       <FooterBar />
       <UpstreamConfigGate />
+      <ResultDetailDrawer />
     </div>
   );
 }
