@@ -8,7 +8,7 @@
 ![go](https://img.shields.io/badge/go-%3E%3D1.25-00ADD8)
 ![react](https://img.shields.io/badge/react-18-61DAFB)
 ![wails](https://img.shields.io/badge/wails-v2-DF0000)
-![platform](https://img.shields.io/badge/platform-windows-lightgrey)
+![platform](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-lightgrey)
 
 ---
 
@@ -70,11 +70,15 @@
 
 ### 方式 1:下载预编译版本(推荐)
 
-到 [Releases](https://github.com/RoseKhlifa/Image-Studio/releases) 页面下载 `image-studio-windows-amd64.exe`(约 29 MB,内嵌 HarmonyOS Sans SC Regular + Medium + JetBrains Mono),双击即可运行。
+到 [Releases](https://github.com/RoseKhlifa/Image-Studio/releases) 页面下载对应平台的预编译版本(均内嵌 HarmonyOS Sans SC Regular + Medium + JetBrains Mono):
 
-Win10+ 需要 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)(大部分新机器已预装)。
+| 平台 | 产物 | 大小 | 首次启动 |
+|---|---|---|---|
+| **Windows x64** | `image-studio-windows-amd64.exe` | ~29 MB | 双击运行;需 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)(Win10+ 大部分已预装) |
+| **macOS** (universal) | `image-studio-macos-universal.zip` | ~32 MB | 解压后 `xattr -dr com.apple.quarantine image-studio.app` 去 Gatekeeper 隔离,或右键 → 打开 |
+| **Linux x64** | `image-studio-linux-amd64.tar.gz` | ~16 MB | `tar -xzf` 解压 → `chmod +x image-studio` → 运行;需 `libgtk-3-0 libwebkit2gtk-4.1-0`(桌面 Ubuntu 22.04+ / 24.04 默认装好) |
 
-> 目前只发布 Windows 预编译版本。**macOS / Linux 用户请走「方式 2:从源码构建」** —— Wails v2 不支持跨平台编译,需要在目标平台上原生 build。代码本身是跨平台的,完整在 macOS / Linux 上能跑。
+> Wails v2 不支持跨平台编译,以上三个产物分别在各自原生平台上 build。代码本身跨平台,有问题欢迎 issue。
 
 ### 方式 2:从源码构建
 
@@ -94,7 +98,7 @@ wails dev
 wails build
 ```
 
-macOS 用 `wails build -platform darwin/universal`,Linux 用 `wails build -platform linux/amd64`(需要 `libgtk-3-dev libwebkit2gtk-4.1-dev`)。作者只在 Windows 11 上日常用,其他平台可能有 UX 细节没打磨到。
+macOS 直接 `wails build`(产物 `image-studio.app`,通用二进制 Apple Silicon + Intel)。Linux 需要先装 `libgtk-3-dev libwebkit2gtk-4.1-dev`(Ubuntu 24.04 / 桌面 Debian 同款)然后 `wails build -tags webkit2_41`;22.04 系是 `libwebkit2gtk-4.0-dev`,直接 `wails build` 不加 tag。
 
 ---
 
