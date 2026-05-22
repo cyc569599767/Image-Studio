@@ -24,7 +24,7 @@ export function WorkspaceBar() {
   }
 
   return (
-    <div className="flex items-center gap-1 px-3 py-1.5 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-xl border-b border-black/[0.08] dark:border-white/[0.06] overflow-x-auto">
+    <div className="drag-region flex items-center gap-1.5 overflow-x-auto border-b border-black/[0.06] bg-[var(--toolbar)] px-4 py-2 backdrop-blur-2xl dark:border-white/[0.06]">
       {workspaces.map((w) => {
         const active = w.id === activeWorkspaceId;
         const isEditing = editingId === w.id;
@@ -35,15 +35,15 @@ export function WorkspaceBar() {
             onDoubleClick={() => startRename(w.id, w.name)}
             title="双击重命名"
             className={
-              "group flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs transition-colors cursor-pointer shrink-0 " +
+              "no-drag group flex h-8 shrink-0 items-center gap-2 rounded-full px-3 text-[12px] transition-all cursor-pointer " +
               (active
-                ? "bg-emerald-500/12 text-emerald-300 ring-1 ring-emerald-500/30"
-                : "text-zinc-600 dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-200")
+                ? "bg-white text-zinc-900 shadow-sm ring-1 ring-black/[0.06] dark:bg-zinc-900 dark:text-zinc-100 dark:ring-white/[0.08]"
+                : "text-zinc-500 hover:bg-black/[0.04] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200")
             }
           >
             {isEditing ? (
               <input
-                className="bg-transparent outline-none w-24 text-xs"
+                className="no-drag w-24 bg-transparent text-[12px] outline-none"
                 value={editingName}
                 autoFocus
                 onChange={(e) => setEditingName(e.target.value)}
@@ -54,7 +54,7 @@ export function WorkspaceBar() {
                 }}
               />
             ) : (
-              <span className="truncate max-w-[120px]">{w.name}</span>
+              <span className="max-w-[132px] truncate">{w.name}</span>
             )}
             {!isEditing && (
               <button
@@ -64,9 +64,9 @@ export function WorkspaceBar() {
                   closeWorkspace(w.id);
                 }}
                 title="关闭"
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 -mr-1 rounded hover:bg-black/10 dark:hover:bg-white/10"
+                className="no-drag opacity-0 transition-opacity group-hover:opacity-100 -mr-1 rounded-full p-1 hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
               >
-                <X className="w-3 h-3" />
+                <X className="h-3 w-3" />
               </button>
             )}
           </div>
@@ -76,9 +76,9 @@ export function WorkspaceBar() {
         type="button"
         onClick={() => newWorkspace()}
         title="新建标签页"
-        className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors shrink-0"
+        className="no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-black/[0.04] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
       >
-        <Plus className="w-3.5 h-3.5" />
+        <Plus className="h-3.5 w-3.5" />
       </button>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { AppHeader } from "./components/layout/AppHeader";
 import { WorkspaceBar } from "./components/layout/WorkspaceBar";
 import { FooterBar } from "./components/layout/FooterBar";
@@ -9,9 +9,11 @@ import { SourceStrip } from "./components/canvas/SourceStrip";
 import { StatusBar } from "./components/canvas/StatusBar";
 import { HistoryRail } from "./components/history/HistoryRail";
 import { ToastContainer } from "./components/common/ToastContainer";
-import { UpstreamConfigModal } from "./components/panel/UpstreamConfigModal";
-import { ResultDetailDrawer } from "./components/panel/ResultDetailDrawer";
 import { useStudioStore } from "./state/studioStore";
+import { isMac } from "./lib/platform";
+
+const UpstreamConfigModal = lazy(() => import("./components/panel/UpstreamConfigModal").then((m) => ({ default: m.UpstreamConfigModal })));
+const ResultDetailDrawer = lazy(() => import("./components/panel/ResultDetailDrawer").then((m) => ({ default: m.ResultDetailDrawer })));
 
 function App() {
   const bootstrap = useStudioStore((s) => s.bootstrap);
@@ -30,7 +32,7 @@ function App() {
       const k = e.key.toLowerCase();
       const st = useStudioStore.getState();
 
-      // Ctrl+Enter: submit. Works inside the prompt textarea too.
+      // Primary-modifier + Enter: submit. Works inside the prompt textarea too.
       if (k === "enter") {
         e.preventDefault();
         if (!st.isRunning) st.submit();
@@ -44,6 +46,9 @@ function App() {
       } else if (k === "w") {
         e.preventDefault();
         if (st.workspaces.length > 1) st.closeWorkspace(st.activeWorkspaceId);
+      } else if (isMac && e.ctrlKey && e.metaKey && k === "f") {
+        e.preventDefault();
+        st.setField("fullscreen", !st.fullscreen);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -113,8 +118,8 @@ function App() {
     <div className="app-root relative">
       {/* Ambient background blobs — 模糊圆球点缀,主界面之下永远不挡 */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10">
-        <div className="absolute top-[-8%] left-[18%] w-[460px] h-[460px] rounded-full bg-emerald-500/[0.04] blur-3xl" />
-        <div className="absolute top-[55%] right-[-8%] w-[400px] h-[400px] rounded-full bg-blue-500/[0.03] blur-3xl" />
+        <div className="absolute left-[18%] top-[-8%] h-[460px] w-[460px] rounded-full bg-sky-500/[0.05] blur-3xl" />
+        <div className="absolute right-[-8%] top-[55%] h-[400px] w-[400px] rounded-full bg-cyan-400/[0.035] blur-3xl" />
       </div>
 
       <AppHeader />
@@ -141,7 +146,9 @@ function App() {
       </div>
       <FooterBar />
       <UpstreamConfigGate />
-      <ResultDetailDrawer />
+      <Suspense fallback={null}>
+        <ResultDetailDrawer />
+      </Suspense>
     </div>
   );
 }
@@ -152,7 +159,12 @@ function App() {
 function UpstreamConfigGate() {
   const open = useStudioStore((s) => s.upstreamModalOpen);
   const close = useStudioStore((s) => s.closeUpstreamConfig);
-  return <UpstreamConfigModal open={open} onClose={close} />;
+  if (!open) return null;
+  return (
+    <Suspense fallback={null}>
+      <UpstreamConfigModal open={open} onClose={close} />
+    </Suspense>
+  );
 }
 
 export default App;

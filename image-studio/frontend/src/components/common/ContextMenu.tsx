@@ -43,7 +43,7 @@ export function ContextMenu({
       ref={ref}
       style={{ position: "fixed", left, top, width: w }}
       onContextMenu={(e) => e.preventDefault()}
-      className="z-[9200] py-1 rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-black/10 dark:ring-white/10 shadow-2xl overflow-hidden"
+      className="z-[9200] overflow-hidden rounded-[18px] border border-black/[0.08] bg-white/95 py-1 shadow-[0_24px_60px_rgb(15_23_42_/_0.16)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-zinc-900/95"
     >
       {items.map((it, i) => (
         <div key={i}>
@@ -54,7 +54,7 @@ export function ContextMenu({
             className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
               it.danger
                 ? "text-red-500 hover:bg-red-500/10"
-                : "text-zinc-700 dark:text-zinc-300 hover:bg-emerald-500/10 hover:text-emerald-400"
+                : "text-zinc-700 dark:text-zinc-300 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
             }`}
           >
             {it.icon && <span className="w-4 text-center">{it.icon}</span>}

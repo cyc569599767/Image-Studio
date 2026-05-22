@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	neturl "net/url"
 	"os"
 	"time"
 
@@ -66,10 +67,10 @@ func (s *Service) OpenOutputDir() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(imagesSubdir(dir), 0o755); err != nil {
+	if err := os.MkdirAll(imagesSubdir(dir), secureDirMode); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(logSubdir(dir), 0o755); err != nil {
+	if err := os.MkdirAll(logSubdir(dir), secureDirMode); err != nil {
 		return err
 	}
 	return openInExplorer(dir)
@@ -77,18 +78,31 @@ func (s *Service) OpenOutputDir() error {
 
 // OpenExternalURL launches a URL in the default browser. Used for GitHub /
 // MIT license / Issues links in the About dialog and Footer.
-func (s *Service) OpenExternalURL(url string) error {
-	if url == "" {
+func (s *Service) OpenExternalURL(rawURL string) error {
+	if rawURL == "" {
 		return errors.New("url is empty")
 	}
-	return openInExplorer(url)
+	parsed, err := neturl.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return errors.New("invalid external url")
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return errors.New("unsupported external url scheme")
+	}
+	return openInExplorer(rawURL)
 }
 
 // ReadImageAsBase64 loads an image file from disk and returns its bytes as
 // standard base64. Used by the frontend to refresh the canvas after a
 // rotate/flip/crop operation produced a new file in imports/.
 func (s *Service) ReadImageAsBase64(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	allowed, err := s.ensureManagedReadablePath(path, managedImageFile)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(allowed)
 	if err != nil {
 		return "", err
 	}
@@ -98,7 +112,11 @@ func (s *Service) ReadImageAsBase64(path string) (string, error) {
 // ReadTextFile returns a file's contents as a string. Used to display the raw
 // SSE response in the "查看 raw" modal.
 func (s *Service) ReadTextFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	allowed, err := s.ensureManagedReadablePath(path, managedRawLogFile)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(allowed)
 	if err != nil {
 		return "", err
 	}
@@ -118,7 +136,7 @@ func (s *Service) ExportHistoryToFile(jsonContent string) (string, error) {
 	if err != nil || dst == "" {
 		return "", err
 	}
-	if err := os.WriteFile(dst, []byte(jsonContent), 0o644); err != nil {
+	if err := os.WriteFile(dst, []byte(jsonContent), secureFileMode); err != nil {
 		return "", err
 	}
 	return dst, nil

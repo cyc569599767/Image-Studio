@@ -8,6 +8,7 @@ export type QualityValue = "auto" | "high" | "medium" | "low";
 export type TransportKind = "auto" | "native" | "curl";
 // 让上游做编码;落盘扩展名 jpeg → .jpg,其他原样。
 export type OutputFormatValue = "png" | "jpeg" | "webp";
+export type ThemeMode = "system" | "light" | "dark";
 
 export interface SizeOption { value: SizeValue; label: string; }
 export interface QualityOption { value: QualityValue; label: string; }
@@ -47,8 +48,10 @@ export interface SourceImage {
 
 export interface HistoryItem {
   id: string;
-  // base64 PNG (without `data:` prefix) — kept here so it can be reused as edit source.
+  // For history entries this may be a compact preview; currentImage/resultDetail
+  // may hold the full-resolution image.
   imageB64: string;
+  previewOnly?: boolean;
   prompt: string;
   revisedPrompt?: string;
   mode: Mode;

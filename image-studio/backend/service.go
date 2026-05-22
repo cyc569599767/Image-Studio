@@ -3,13 +3,14 @@
 // this package only wires it into Wails (context, events, file dialogs).
 //
 // File layout:
-//   service.go   — Service struct, lifecycle, generation orchestration (Generate / Edit / Cancel)
-//   types.go     — JSON-bound structs shared with the TS frontend
-//   dialogs.go   — file picker / save / open URL / read image / import-export history
-//   imports.go   — drag-drop / paste import + filename sanitisation
-//   imageops.go  — rotate / flip / crop on disk via Go image stdlib
-//   paths.go     — output / import dir resolution + filename helpers
-//   open.go      — cross-platform "open in OS" shell-out
+//
+//	service.go   — Service struct, lifecycle, generation orchestration (Generate / Edit / Cancel)
+//	types.go     — JSON-bound structs shared with the TS frontend
+//	dialogs.go   — file picker / save / open URL / read image / import-export history
+//	imports.go   — drag-drop / paste import + filename sanitisation
+//	imageops.go  — rotate / flip / crop on disk via Go image stdlib
+//	paths.go     — output / import dir resolution + filename helpers
+//	open.go      — cross-platform "open in OS" shell-out
 package backend
 
 import (
@@ -36,6 +37,9 @@ type Service struct {
 	mu        sync.Mutex
 	jobs      map[string]*job
 	outputDir string // 用户自定义输出目录;空时回退到 defaultOutputDir()
+	apiKeys   apiKeyStore
+
+	trustedOutputRoots map[string]struct{}
 }
 
 type job struct {
@@ -45,7 +49,11 @@ type job struct {
 
 // NewService constructs a fresh Service ready to be passed to wails.Run Bind.
 func NewService() *Service {
-	return &Service{jobs: map[string]*job{}}
+	return &Service{
+		jobs:               map[string]*job{},
+		apiKeys:            keyringAPIKeyStore{},
+		trustedOutputRoots: map[string]struct{}{},
+	}
 }
 
 // Startup is wired into wails.Options OnStartup; persists the runtime context.
@@ -60,12 +68,17 @@ func (s *Service) resolvedOutputDir() (string, error) {
 	custom := s.outputDir
 	s.mu.Unlock()
 	if custom != "" {
-		if err := os.MkdirAll(custom, 0o755); err != nil {
+		if err := os.MkdirAll(custom, secureDirMode); err != nil {
 			return "", fmt.Errorf("无法创建输出目录 %s: %w", custom, err)
 		}
+		s.addTrustedOutputRoot(custom)
 		return custom, nil
 	}
-	return defaultOutputDir()
+	root, err := defaultOutputDir()
+	if err == nil {
+		s.addTrustedOutputRoot(root)
+	}
+	return root, err
 }
 
 // SetOutputDir 由前端调用以应用用户选择的输出目录。空串表示恢复默认。
@@ -81,12 +94,13 @@ func (s *Service) SetOutputDir(path string) error {
 	if err != nil {
 		return fmt.Errorf("路径无效:%w", err)
 	}
-	if err := os.MkdirAll(clean, 0o755); err != nil {
+	if err := os.MkdirAll(clean, secureDirMode); err != nil {
 		return fmt.Errorf("无法创建输出目录 %s: %w", clean, err)
 	}
 	s.mu.Lock()
 	s.outputDir = clean
 	s.mu.Unlock()
+	s.addTrustedOutputRoot(clean)
 	return nil
 }
 
@@ -203,20 +217,20 @@ func (s *Service) runJob(ctx context.Context, jobID string, opts GenerateOptions
 	}
 
 	clientOpts := client.Options{
-		APIKey:         opts.APIKey,
-		Prompt:         opts.Prompt,
-		Mode:           mode,
-		Size:           opts.Size,
-		Quality:        opts.Quality,
-		OutputFormat:   opts.OutputFormat,
-		MaskB64:        opts.MaskB64,
-		Seed:           opts.Seed,
-		NegativePrompt: opts.NegativePrompt,
-		BaseURL:        opts.BaseURL,
-		TextModelID:    opts.TextModelID,
-		ImageModelID:   opts.ImageModelID,
-		Transport:      client.TransportKind(opts.Transport),
-		APIMode:        apiMode,
+		APIKey:           opts.APIKey,
+		Prompt:           opts.Prompt,
+		Mode:             mode,
+		Size:             opts.Size,
+		Quality:          opts.Quality,
+		OutputFormat:     opts.OutputFormat,
+		MaskB64:          opts.MaskB64,
+		Seed:             opts.Seed,
+		NegativePrompt:   opts.NegativePrompt,
+		BaseURL:          opts.BaseURL,
+		TextModelID:      opts.TextModelID,
+		ImageModelID:     opts.ImageModelID,
+		Transport:        client.TransportKind(opts.Transport),
+		APIMode:          apiMode,
 		NoPromptRevision: opts.NoPromptRevision,
 	}
 	if mode == client.ModeEdit {
@@ -252,11 +266,11 @@ func (s *Service) runJob(ctx context.Context, jobID string, opts GenerateOptions
 	// 拆 PNG 和 raw response 到两个子目录,避免单目录文件混杂。
 	imagesDir := imagesSubdir(rootDir)
 	logDir := logSubdir(rootDir)
-	if err := os.MkdirAll(imagesDir, 0o755); err != nil {
+	if err := os.MkdirAll(imagesDir, secureDirMode); err != nil {
 		s.emitError(jobID, err)
 		return
 	}
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
+	if err := os.MkdirAll(logDir, secureDirMode); err != nil {
 		s.emitError(jobID, err)
 		return
 	}

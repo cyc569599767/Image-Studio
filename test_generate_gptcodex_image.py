@@ -6,6 +6,7 @@ from pathlib import Path
 
 from generate_gptcodex_image import (
     build_curl_command,
+    build_curl_config,
     build_payload,
     describe_response_problem,
     extract_image_result_from_sse,
@@ -61,12 +62,18 @@ class ExtractImageResultTests(unittest.TestCase):
         self.assertEqual(data_url, f"data:image/png;base64,{PNG_B64}")
 
     def test_curl_command_streams_response_to_stdout(self):
-        command = build_curl_command("sk-test", Path("request.json"))
+        command = build_curl_command(Path("request.json"), Path("headers.cfg"))
 
         self.assertIn("-N", command)
         self.assertIn("--data-binary", command)
         self.assertIn("@request.json", command)
         self.assertNotIn("-o", command)
+        self.assertIn("--config", command)
+        self.assertIn("headers.cfg", command)
+        self.assertNotIn("Authorization: Bearer sk-test", command)
+
+        config = build_curl_config("sk-test")
+        self.assertIn('header = "Authorization: Bearer sk-test"', config)
 
     def test_extracts_final_image_generation_result(self):
         sse = "\n".join(

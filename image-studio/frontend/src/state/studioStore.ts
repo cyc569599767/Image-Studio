@@ -5,6 +5,9 @@ import {
   Edit as wailsEdit,
   Cancel as wailsCancel,
   OpenImageDialog,
+  GetOutputDir,
+  GetStoredAPIKey,
+  SetStoredAPIKey,
   SaveImageAs,
   ImportImageFromB64,
   RotateImage,
@@ -13,6 +16,7 @@ import {
   ReadImageAsBase64,
   ExportHistoryToFile,
   ImportHistoryFromFile,
+  RegisterTrustedOutputDir,
   SetOutputDir,
 } from "../../wailsjs/go/backend/Service";
 import type { backend } from "../../wailsjs/go/models";
@@ -25,21 +29,35 @@ import {
   QualityValue,
   SizeValue,
   SourceImage,
+  ThemeMode,
   Toast,
   TransportKind,
   Workspace,
   Annotation,
 } from "../types/domain";
 import {
-  loadAPIKey,
-  saveAPIKey,
+  clearLegacyAPIKeys,
+  loadLegacyModeAPIKey,
+  loadHistoryFullImage,
+  loadLegacySharedAPIKey,
+  loadTrustedOutputRoots,
   persistHistoryItem,
+  persistHistoryFullImage,
+  pruneHistoryStorage,
+  rememberTrustedOutputRoot,
   removeHistoryItem,
   loadAllHistory,
 } from "../lib/storage";
+import {
+  cleanBaseURL,
+  sanitizeHistoryForExport,
+  sanitizeImportedHistoryItem,
+  suggestedImportNameForHistory,
+  validateBaseURL,
+} from "../lib/security";
 
-// 单个 API 形态的上游 5 字段(去掉 apiMode 本身)。两种形态各持有一份,在
-// localStorage 里以 `gptcodex.<mode>.<field>` 命名持久化。
+// 单个 API 形态的上游 5 字段(去掉 apiMode 本身)。
+// 其中 apiKey 只进后端凭据存储;其余字段走 localStorage。
 export interface ModeConfig {
   baseURL: string;
   apiKey: string;
@@ -48,26 +66,66 @@ export interface ModeConfig {
 }
 
 const EMPTY_MODE_CFG: ModeConfig = { baseURL: "", apiKey: "", textModelID: "", imageModelID: "" };
+const MAX_HISTORY_ITEMS = 120;
+let detachSystemThemeListener: (() => void) | null = null;
+
+function resolvedTheme(theme: ThemeMode): "light" | "dark" {
+  if (theme === "dark" || theme === "light") return theme;
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return "dark";
+}
+
+function unbindSystemThemeListener() {
+  if (detachSystemThemeListener) {
+    detachSystemThemeListener();
+    detachSystemThemeListener = null;
+  }
+}
+
+function writeResolvedTheme(theme: "light" | "dark") {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.documentElement.classList.toggle("dark", theme === "dark");
+  document.documentElement.style.colorScheme = theme;
+}
+
+function bindSystemThemeListener() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const apply = (matches: boolean) => writeResolvedTheme(matches ? "dark" : "light");
+  const onChange = (event: MediaQueryListEvent) => apply(event.matches);
+  apply(media.matches);
+  if (typeof media.addEventListener === "function") {
+    media.addEventListener("change", onChange);
+    detachSystemThemeListener = () => media.removeEventListener("change", onChange);
+    return;
+  }
+  media.addListener(onChange);
+  detachSystemThemeListener = () => media.removeListener(onChange);
+}
+
+function applyTheme(theme: ThemeMode) {
+  unbindSystemThemeListener();
+  document.documentElement.setAttribute("data-appearance", theme);
+  writeResolvedTheme(resolvedTheme(theme));
+  if (theme === "system") bindSystemThemeListener();
+}
 
 function loadModeConfig(mode: "responses" | "images"): ModeConfig {
-  const r = (k: keyof ModeConfig): string => {
+  const r = (k: Exclude<keyof ModeConfig, "apiKey">): string => {
     try { return localStorage.getItem(`gptcodex.${mode}.${k}`) ?? ""; } catch { return ""; }
   };
   return {
     baseURL: r("baseURL"),
-    apiKey: r("apiKey"),
+    apiKey: "",
     textModelID: r("textModelID"),
     imageModelID: r("imageModelID"),
   };
 }
 
-function saveModeField(mode: "responses" | "images", field: keyof ModeConfig, value: string) {
+function saveModeField(mode: "responses" | "images", field: Exclude<keyof ModeConfig, "apiKey">, value: string) {
   try { localStorage.setItem(`gptcodex.${mode}.${field}`, value); } catch {}
-}
-
-// trim trailing slashes — Go 端虽然会兜底,UI 持久化也清一遍,展示更干净
-function cleanBaseURL(v: string): string {
-  return v.replace(/\/+$/, "").trim();
 }
 
 interface StudioState {
@@ -112,7 +170,7 @@ interface StudioState {
   jobsTotal: number;
   jobsCompleted: number;
   progress: ProgressInfo | null;
-  logLines: string[];
+  lastLogLine: string;
   errorMessage: string | null;
   isRunning: boolean;
   // Snapshot of the last successfully-built payload, used by the retry button
@@ -162,7 +220,7 @@ interface StudioState {
   presets: Preset[];
 
   // UI theme + font scale; persisted to localStorage and applied to <html>.
-  theme: "dark" | "light";
+  theme: ThemeMode;
   fontScale: number; // 0.85 / 1 / 1.15
 
   // Multi-workspace (tabs). Top-level prompt/sources/etc. mirror the active tab.
@@ -181,7 +239,7 @@ interface StudioState {
 
   // ---- Actions ----
   setField: <K extends keyof StudioState>(key: K, value: StudioState[K]) => void;
-  setAPIKey: (v: string) => void;
+  setAPIKey: (v: string) => Promise<void>;
   selectSourceImage: () => Promise<void>;
   removeSource: (index: number) => void;
   clearSources: () => void;
@@ -211,15 +269,16 @@ interface StudioState {
   dismissToast: (id: string) => void;
   // 「查看详情」抽屉。打开时锁住当前 HistoryItem,不随 currentImage 切换变化。
   resultDetail: HistoryItem | null;
-  openResultDetail: (item: HistoryItem) => void;
+  openResultDetail: (item: HistoryItem) => Promise<void>;
   closeResultDetail: () => void;
+  materializeCurrentImage: (item: HistoryItem) => Promise<HistoryItem>;
   retryLast: () => Promise<void>;
   savePreset: (name: string) => void;
   applyPreset: (id: string) => void;
   deletePreset: (id: string) => void;
   exportHistory: () => Promise<void>;
   importHistory: () => Promise<void>;
-  setTheme: (t: "dark" | "light") => void;
+  setTheme: (t: ThemeMode) => void;
   setFontScale: (v: number) => void;
   testAPIKey: () => Promise<void>;
   isTestingKey: boolean;
@@ -267,6 +326,87 @@ function tempDataURLFromB64(b64: string): string {
 function stripDataURLPrefix(dataURL: string): string {
   const idx = dataURL.indexOf(",");
   return idx >= 0 ? dataURL.slice(idx + 1) : dataURL;
+}
+
+function buildMaskPNGDataURL(strokes: Stroke[], dims: { w: number; h: number } | null): string | null {
+  if (!dims || strokes.length === 0) return null;
+  const c = document.createElement("canvas");
+  c.width = dims.w;
+  c.height = dims.h;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  let hasWhite = false;
+  for (const s of strokes) {
+    ctx.strokeStyle = s.erase ? "#000" : "#fff";
+    ctx.lineWidth = s.size;
+    ctx.beginPath();
+    for (let i = 0; i < s.points.length; i += 2) {
+      const x = s.points[i];
+      const y = s.points[i + 1];
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    if (!s.erase) hasWhite = true;
+  }
+  return hasWhite ? c.toDataURL("image/png") : null;
+}
+
+async function registerTrustedOutputRoots(roots: string[]): Promise<void> {
+  for (const root of roots) {
+    if (!root.trim()) continue;
+    await RegisterTrustedOutputDir(root).catch(() => undefined);
+  }
+}
+
+function trimHistory(items: HistoryItem[]): HistoryItem[] {
+  if (items.length <= MAX_HISTORY_ITEMS) return items;
+  return items.slice(0, MAX_HISTORY_ITEMS);
+}
+
+function persistTrimmedHistory(items: HistoryItem[]): void {
+  const keptIDs = items.map((item) => item.id);
+  void pruneHistoryStorage(keptIDs);
+}
+
+function decodeBase64Bytes(b64: string): Uint8Array | null {
+  try {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+async function createPreviewB64(b64: string, maxEdge = 192): Promise<string> {
+  const bytes = decodeBase64Bytes(b64);
+  if (!bytes) return b64;
+  const cloned = new Uint8Array(bytes.byteLength);
+  cloned.set(bytes);
+  const blob = new Blob([cloned], { type: "image/png" });
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    if (scale >= 0.999) return b64;
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return b64;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const dataURL = canvas.toDataURL("image/jpeg", 0.72);
+    return stripDataURLPrefix(dataURL);
+  } finally {
+    bitmap.close();
+  }
 }
 
 // Compute image natural dimensions from a base64 PNG by reading the IHDR chunk.
@@ -340,7 +480,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   jobsTotal: 0,
   jobsCompleted: 0,
   progress: null,
-  logLines: [],
+  lastLogLine: "",
   errorMessage: null,
   isRunning: false,
   lastPayload: null,
@@ -371,7 +511,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   promptHistory: [],
   batchCount: 1,
   presets: [],
-  theme: "dark",
+  theme: "system",
   fontScale: 1,
   isTestingKey: false,
   upstreamModalOpen: false,
@@ -393,7 +533,6 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         textModelID: cfg.textModelID,
         imageModelID: cfg.imageModelID,
       });
-      saveAPIKey(cfg.apiKey); // 让旧的 gptcodex.apiKey 也跟着新 active 走,保持向后兼容
       try { localStorage.setItem("gptcodex.apiMode", newMode); } catch {}
       return;
     }
@@ -404,7 +543,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const slot = mode === "responses" ? "responsesConfig" : "imagesConfig";
       const next: ModeConfig = { ...get()[slot], [key]: cleaned };
       set({ [key]: cleaned, [slot]: next } as any);
-      saveModeField(mode, key as keyof ModeConfig, cleaned);
+      saveModeField(mode, key as Exclude<keyof ModeConfig, "apiKey">, cleaned);
       return;
     }
     // 其他全局偏好字段
@@ -418,13 +557,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     }
   },
 
-  setAPIKey: (v) => {
-    saveAPIKey(v); // legacy gptcodex.apiKey,保持向后兼容
+  setAPIKey: async (v) => {
+    const trimmed = v.trim();
     const mode = get().apiMode;
     const slot = mode === "responses" ? "responsesConfig" : "imagesConfig";
-    const next: ModeConfig = { ...get()[slot], apiKey: v };
-    set({ apiKey: v, [slot]: next } as any);
-    saveModeField(mode, "apiKey", v);
+    const next: ModeConfig = { ...get()[slot], apiKey: trimmed };
+    set({ apiKey: trimmed, [slot]: next } as any);
+    await SetStoredAPIKey(mode, trimmed);
   },
 
   selectSourceImage: async () => {
@@ -474,14 +613,23 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       return;
     }
     if (!s.baseURL.trim()) {
-      set({ errorMessage: "请在「设置 → 上游 BASE_URL」中填入你的中转站地址(必须兼容 OpenAI Responses API + image_generation 工具)" });
+      set({ errorMessage: "请在右侧工作栏顶部的「上游配置」中填入你的中转站地址(必须兼容 OpenAI Responses API + image_generation 工具)" });
+      return;
+    }
+    const cleanedBaseURL = cleanBaseURL(s.baseURL);
+    const baseURLError = validateBaseURL(cleanedBaseURL);
+    if (baseURLError) {
+      set({ errorMessage: baseURLError });
       return;
     }
     let editSourcePaths: string[] = [];
     if (s.mode === "edit") {
       editSourcePaths = s.sources.map((src) => src.path).filter(Boolean);
-      if (editSourcePaths.length === 0 && s.currentImage?.savedPath) {
-        editSourcePaths = [s.currentImage.savedPath];
+      if (editSourcePaths.length === 0 && s.currentImage) {
+        const materialized = await materializeHistoryItem(s.currentImage).catch(() => null);
+        if (materialized?.savedPath) {
+          editSourcePaths = [materialized.savedPath];
+        }
       }
       if (editSourcePaths.length === 0) {
         set({ errorMessage: "图生图模式需要先添加源图(或从文件管理器拖图到画板)" });
@@ -492,14 +640,17 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     set({
       errorMessage: null,
       progress: null,
-      logLines: [],
+      lastLogLine: "",
       isRunning: true,
       jobsTotal: 1,
       jobsCompleted: 0,
       runningJobs: [],
     });
 
-    const maskB64 = s.mode === "edit" && s.maskDataURL ? stripDataURLPrefix(s.maskDataURL) : "";
+    const maskDataURL = s.mode === "edit"
+      ? buildMaskPNGDataURL(s.strokes, s.currentImage?.imageB64 ? imageDims(s.currentImage.imageB64) : null)
+      : null;
+    const maskB64 = maskDataURL ? stripDataURLPrefix(maskDataURL) : "";
     let augmentedPrompt = augmentPromptWithAnnotations(s.prompt, s.annotations, s.currentImage?.imageB64 ? imageDims(s.currentImage.imageB64) : null);
     // Append style chip suffix if the user picked one (other than "全部").
     const styleSuffix = STYLE_SUFFIXES[s.styleTag];
@@ -519,7 +670,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       maskB64: maskB64,
       seed: s.seed,
       negativePrompt: s.negativePrompt,
-      baseURL: s.baseURL,
+      baseURL: cleanedBaseURL,
       textModelID: s.textModelID,
       imageModelID: s.imageModelID,
       transport: s.transport,
@@ -591,19 +742,20 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   reuseAsSource: async (item) => {
-    if (!item.savedPath) {
-      set({ errorMessage: "该历史项没有本地路径,无法作为源图复用" });
-      return;
-    }
-    const baseName = item.savedPath.split(/[\\/]/).pop() ?? "source.png";
+    const localItem = await materializeHistoryItem(item).catch((e: any) => {
+      set({ errorMessage: `源图准备失败:${e?.message ?? e}` });
+      return null;
+    });
+    if (!localItem?.savedPath) return;
+    const baseName = localItem.savedPath.split(/[\\/]/).pop() ?? "source.png";
     const existing = get().sources;
-    const alreadyIn = existing.some((s) => s.path === item.savedPath);
+    const alreadyIn = existing.some((s) => s.path === localItem.savedPath);
     set({
       mode: "edit",
-      currentImage: item,
+      currentImage: localItem,
       sources: alreadyIn
         ? existing
-        : [...existing, { path: item.savedPath, name: baseName, size: 0 }],
+        : [...existing, { path: localItem.savedPath, name: baseName, size: 0 }],
     });
   },
 
@@ -614,7 +766,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   saveCurrentImageAs: async () => {
-    const cur = get().currentImage;
+    const cur = await ensureFullHistoryItem(get().currentImage);
     if (!cur) return;
     const suggested = `image-${cur.mode}-${cur.id.slice(0, 8)}.png`;
     try {
@@ -628,11 +780,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   bootstrap: async () => {
-    const key = loadAPIKey();
     const items = await loadAllHistory();
     let promptHistory: string[] = [];
     let presets: Preset[] = [];
-    let theme: "dark" | "light" = "dark";
+    let theme: ThemeMode = "system";
     let fontScale = 1;
     try {
       const raw = localStorage.getItem("gptcodex.promptHistory");
@@ -644,7 +795,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     } catch {}
     try {
       const raw = localStorage.getItem("gptcodex.theme");
-      if (raw === "light" || raw === "dark") theme = raw;
+      if (raw === "system" || raw === "light" || raw === "dark") theme = raw;
     } catch {}
     try {
       const raw = localStorage.getItem("gptcodex.fontScale");
@@ -674,43 +825,67 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     // 每个形态的独立上游槽
     let responsesConfig = loadModeConfig("responses");
     let imagesConfig = loadModeConfig("images");
-    // 旧版本(共享单份配置)迁移:legacy 字段 → 当前形态的槽,只在该槽为空时迁入。
-    // legacy apiKey 走 loadAPIKey,其他三个走旧的 gptcodex.<field>。
+    // 旧版本(共享单份配置)迁移: legacy 字段 → 当前形态的槽,只在该槽为空时迁入。
     const legacyBaseURL  = (() => { try { return localStorage.getItem("gptcodex.baseURL") ?? ""; } catch { return ""; } })();
     const legacyTextID   = (() => { try { return localStorage.getItem("gptcodex.textModelID") ?? ""; } catch { return ""; } })();
     const legacyImageID  = (() => { try { return localStorage.getItem("gptcodex.imageModelID") ?? ""; } catch { return ""; } })();
-    const legacyKey = key; // loadAPIKey 上面已经取过
+    const legacySharedKey = loadLegacySharedAPIKey();
+    const legacyResponsesKey = loadLegacyModeAPIKey("responses") || (apiMode === "responses" ? legacySharedKey : "");
+    const legacyImagesKey = loadLegacyModeAPIKey("images") || (apiMode === "images" ? legacySharedKey : "");
     const activeSlot = apiMode === "responses" ? responsesConfig : imagesConfig;
     let migrated = false;
     if (!activeSlot.baseURL && legacyBaseURL)     { activeSlot.baseURL = cleanBaseURL(legacyBaseURL); migrated = true; }
-    if (!activeSlot.apiKey && legacyKey)          { activeSlot.apiKey = legacyKey; migrated = true; }
     if (!activeSlot.textModelID && legacyTextID)  { activeSlot.textModelID = legacyTextID; migrated = true; }
     if (!activeSlot.imageModelID && legacyImageID){ activeSlot.imageModelID = legacyImageID; migrated = true; }
     if (migrated) {
       saveModeField(apiMode, "baseURL", activeSlot.baseURL);
-      saveModeField(apiMode, "apiKey", activeSlot.apiKey);
       saveModeField(apiMode, "textModelID", activeSlot.textModelID);
       saveModeField(apiMode, "imageModelID", activeSlot.imageModelID);
       if (apiMode === "responses") responsesConfig = activeSlot;
       else imagesConfig = activeSlot;
     }
+    let responsesKey = await GetStoredAPIKey("responses").catch(() => "");
+    let imagesKey = await GetStoredAPIKey("images").catch(() => "");
+    let clearedLegacy = false;
+    if (!responsesKey && legacyResponsesKey) {
+      try {
+        await SetStoredAPIKey("responses", legacyResponsesKey);
+        responsesKey = legacyResponsesKey;
+        clearedLegacy = true;
+      } catch {}
+    }
+    if (!imagesKey && legacyImagesKey) {
+      try {
+        await SetStoredAPIKey("images", legacyImagesKey);
+        imagesKey = legacyImagesKey;
+        clearedLegacy = true;
+      } catch {}
+    }
+    if (clearedLegacy) clearLegacyAPIKeys();
+    responsesConfig = { ...responsesConfig, apiKey: responsesKey || legacyResponsesKey };
+    imagesConfig = { ...imagesConfig, apiKey: imagesKey || legacyImagesKey };
+    const activeConfig = apiMode === "responses" ? responsesConfig : imagesConfig;
     // 顶层镜像 = 当前形态的槽
-    const baseURL = activeSlot.baseURL;
-    const textModelID = activeSlot.textModelID;
-    const imageModelID = activeSlot.imageModelID;
-    const activeKey = activeSlot.apiKey || legacyKey; // 优先使用形态槽里的 key
-    if (activeKey !== legacyKey) saveAPIKey(activeKey); // 同步 legacy 存储
+    const baseURL = activeConfig.baseURL;
+    const textModelID = activeConfig.textModelID;
+    const imageModelID = activeConfig.imageModelID;
+    const activeKey = activeConfig.apiKey;
     // Apply theme + font scale to root immediately.
-    document.documentElement.setAttribute("data-theme", theme);
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    applyTheme(theme);
     document.documentElement.style.setProperty("--font-scale", String(fontScale));
-    // 用户自定义输出目录 —— 把 localStorage 里保存的路径推给 backend。
+    // 用户自定义输出目录 —— 推给 backend,并记为可信输出根。
+    const trustedRoots = new Set(loadTrustedOutputRoots());
     try {
       const customOutput = localStorage.getItem("gptcodex.outputDir");
       if (customOutput && customOutput.trim()) {
-        SetOutputDir(customOutput).catch(() => undefined);
+        await SetOutputDir(customOutput).catch(() => undefined);
+        trustedRoots.add(customOutput.trim());
       }
     } catch {}
+    const effectiveOutput = await GetOutputDir().catch(() => "");
+    if (effectiveOutput) trustedRoots.add(effectiveOutput);
+    for (const root of trustedRoots) rememberTrustedOutputRoot(root);
+    await registerTrustedOutputRoots(Array.from(trustedRoots));
     // Make sure there's always at least one workspace.
     const wsId = genId();
     const initialWorkspace: Workspace = {
@@ -728,7 +903,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       currentImageId: null,
     };
     set({
-      apiKey: activeKey, history: items, promptHistory, presets, theme, fontScale,
+      apiKey: activeKey, history: trimHistory(items), promptHistory, presets, theme, fontScale,
       apiMode, baseURL, textModelID, imageModelID, transport, noPromptRevision,
       outputFormat,
       responsesConfig, imagesConfig,
@@ -846,7 +1021,15 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     });
   },
 
-  setCompareB: (item) => set({ compareB: item, compareSplit: 0.5 }),
+  setCompareB: (item) => {
+    if (!item) {
+      set({ compareB: null, compareSplit: 0.5 });
+      return;
+    }
+    void ensureFullHistoryItem(item).then((full) => {
+      if (full) set({ compareB: full, compareSplit: 0.5 });
+    });
+  },
   setCompareSplit: (v) => set({ compareSplit: Math.max(0, Math.min(1, v)) }),
 
   pushToast: (text, kind = "info", ttl = 3500, action) => {
@@ -862,15 +1045,27 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
   resultDetail: null,
-  openResultDetail: (item) => set({ resultDetail: item }),
+  openResultDetail: async (item) => {
+    const full = await ensureFullHistoryItem(item);
+    set({ resultDetail: full ?? item });
+  },
   closeResultDetail: () => set({ resultDetail: null }),
+  materializeCurrentImage: async (item) => {
+    const full = await ensureFullHistoryItem(item);
+    return full ?? item;
+  },
 
   rotateCurrent: async (degrees) => {
-    const cur = get().currentImage;
-    if (!cur?.savedPath) {
-      get().pushToast("当前图没有本地路径,无法变换", "warn");
+    let cur = get().currentImage;
+    if (!cur) {
+      get().pushToast("当前没有图片", "warn");
       return;
     }
+    cur = await materializeHistoryItem(cur).catch((e: any) => {
+      get().pushToast(`当前图无法落盘:${e?.message ?? e}`, "error");
+      return null;
+    });
+    if (!cur?.savedPath) return;
     try {
       const r = await RotateImage(cur.savedPath, degrees);
       await loadTransformedAsCurrent(r.path);
@@ -881,11 +1076,16 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   flipCurrent: async (horizontal) => {
-    const cur = get().currentImage;
-    if (!cur?.savedPath) {
-      get().pushToast("当前图没有本地路径,无法变换", "warn");
+    let cur = get().currentImage;
+    if (!cur) {
+      get().pushToast("当前没有图片", "warn");
       return;
     }
+    cur = await materializeHistoryItem(cur).catch((e: any) => {
+      get().pushToast(`当前图无法落盘:${e?.message ?? e}`, "error");
+      return null;
+    });
+    if (!cur?.savedPath) return;
     try {
       const r = await FlipImage(cur.savedPath, horizontal);
       await loadTransformedAsCurrent(r.path);
@@ -896,11 +1096,16 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   cropToRect: async (x, y, w, h) => {
-    const cur = get().currentImage;
-    if (!cur?.savedPath) {
-      get().pushToast("当前图没有本地路径,无法裁剪", "warn");
+    let cur = get().currentImage;
+    if (!cur) {
+      get().pushToast("当前没有图片", "warn");
       return;
     }
+    cur = await materializeHistoryItem(cur).catch((e: any) => {
+      get().pushToast(`当前图无法落盘:${e?.message ?? e}`, "error");
+      return null;
+    });
+    if (!cur?.savedPath) return;
     try {
       const r = await CropImage(cur.savedPath, Math.round(x), Math.round(y), Math.round(w), Math.round(h));
       await loadTransformedAsCurrent(r.path);
@@ -960,7 +1165,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       version: 1,
       exportedAt: new Date().toISOString(),
       count: s.history.length,
-      items: s.history,
+      items: s.history.map(sanitizeHistoryForExport),
     };
     try {
       const dst = await ExportHistoryToFile(JSON.stringify(payload, null, 2));
@@ -973,8 +1178,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setTheme: (t) => {
     set({ theme: t });
     try { localStorage.setItem("gptcodex.theme", t); } catch {}
-    document.documentElement.setAttribute("data-theme", t);
-    document.documentElement.classList.toggle("dark", t === "dark");
+    applyTheme(t);
   },
 
   setFontScale: (v) => {
@@ -990,7 +1194,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       return;
     }
     if (!s.baseURL.trim()) {
-      s.pushToast("先在「设置 → 上游 BASE_URL」中填入中转站地址", "warn", 5000);
+      s.pushToast("先在右侧工作栏顶部的「上游配置」中填入中转站地址", "warn", 5000);
+      return;
+    }
+    const cleanedBaseURL = cleanBaseURL(s.baseURL);
+    const baseURLError = validateBaseURL(cleanedBaseURL);
+    if (baseURLError) {
+      s.pushToast(baseURLError, "error", 6000);
       return;
     }
     if (s.isTestingKey) return;
@@ -1010,7 +1220,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         maskB64: "",
         seed: 0,
         negativePrompt: "",
-        baseURL: s.baseURL,
+        baseURL: cleanedBaseURL,
         textModelID: s.textModelID,
         imageModelID: s.imageModelID,
         transport: s.transport,
@@ -1154,12 +1364,15 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       for (const item of incoming) {
         if (!item.id || existing.has(item.id)) continue;
         if (!item.imageB64 || !item.createdAt) continue;
-        merged.push(item);
-        await persistHistoryItem(item).catch(() => undefined);
+        const safeItem = sanitizeImportedHistoryItem(item);
+        merged.push(safeItem);
+        await persistHistoryItem(safeItem).catch(() => undefined);
         added++;
       }
       merged.sort((a, b) => b.createdAt - a.createdAt);
-      set({ history: merged });
+      const trimmed = trimHistory(merged);
+      set({ history: trimmed });
+      persistTrimmedHistory(trimmed);
       s.pushToast(`已导入 ${added} 条(跳过 ${incoming.length - added} 条重复/无效)`, "success");
     } catch (e: any) {
       s.pushToast(`导入失败:${e?.message ?? e}`, "error");
@@ -1184,7 +1397,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       }
       const b64 = await fileToBase64(file);
       const result = await ImportImageFromB64(b64, file.name);
-      const item: HistoryItem = {
+      const previewB64 = await createPreviewB64(b64);
+      const fullItem: HistoryItem = {
         id: genId(),
         imageB64: b64,
         prompt: `(导入)${file.name}`,
@@ -1194,18 +1408,26 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         createdAt: Date.now(),
         savedPath: result.path,
       };
+      const item: HistoryItem = {
+        ...fullItem,
+        imageB64: previewB64,
+        previewOnly: previewB64 !== b64,
+      };
       await persistHistoryItem(item);
+      await persistHistoryFullImage(item.id, b64).catch(() => undefined);
       const existingSources = get().sources;
       const alreadyIn = existingSources.some((s) => s.path === result.path);
+      const trimmed = trimHistory([item, ...get().history]);
       set({
-        currentImage: item,
-        history: [item, ...get().history],
+        currentImage: fullItem,
+        history: trimmed,
         mode: "edit",
         sources: alreadyIn
           ? existingSources
           : [...existingSources, { path: result.path, name: file.name, size: file.size, imageB64: b64 }],
         errorMessage: null,
       });
+      persistTrimmedHistory(trimmed);
     } catch (e: any) {
       set({ errorMessage: `导入失败:${e?.message ?? e}` });
     }
@@ -1262,6 +1484,41 @@ async function loadTransformedAsCurrent(path: string) {
   }
 }
 
+async function materializeHistoryItem(item: HistoryItem): Promise<HistoryItem> {
+  if (item.savedPath) return item;
+  const imported = await ImportImageFromB64(item.imageB64, suggestedImportNameForHistory(item));
+  const next: HistoryItem = { ...item, savedPath: imported.path };
+  const state = useStudioStore.getState();
+  useStudioStore.setState({
+    currentImage: state.currentImage?.id === item.id ? next : state.currentImage,
+    history: state.history.map((h) => (h.id === item.id ? next : h)),
+  });
+  await persistHistoryItem(next).catch(() => undefined);
+  return next;
+}
+
+async function ensureFullHistoryItem(item: HistoryItem | null): Promise<HistoryItem | null> {
+  if (!item) return null;
+  if (!item.savedPath || !item.previewOnly) return item;
+  try {
+    let fullB64 = await ReadImageAsBase64(item.savedPath).catch(() => "");
+    if (!fullB64) {
+      fullB64 = await loadHistoryFullImage(item.id).catch(() => "");
+    }
+    if (!fullB64) return item;
+    const next: HistoryItem = { ...item, imageB64: fullB64, previewOnly: false };
+    const state = useStudioStore.getState();
+    useStudioStore.setState({
+      currentImage: state.currentImage?.id === item.id ? next : state.currentImage,
+      resultDetail: state.resultDetail?.id === item.id ? next : state.resultDetail,
+      compareB: state.compareB?.id === item.id ? next : state.compareB,
+    });
+    return next;
+  } catch {
+    return item;
+  }
+}
+
 function cryptoIDFallback(): string {
   try {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -1315,17 +1572,19 @@ async function launchOneJob(
       store.setState({ progress: p });
     });
     offLog = EventsOn(`log:${jobId}`, (line: string) => {
-      store.setState({ logLines: [...store.getState().logLines, line] });
+      store.setState({ lastLogLine: line });
     });
 
     const startedAt = Date.now();
     offResult = EventsOn(`result:${jobId}`, (r: any) => {
       cleanup();
+      void (async () => {
       try {
         const elapsedSec = (Date.now() - startedAt) / 1000;
         const rd = [elapsedSec, ...store.getState().recentDurations].slice(0, 5);
         const willNotify = typeof document !== "undefined" && document.visibilityState !== "visible";
-        const item: HistoryItem = {
+        const previewB64 = await createPreviewB64(r.imageB64);
+        const fullItem: HistoryItem = {
           id: cryptoIDFallback(),
           imageB64: r.imageB64,
           prompt: r.prompt,
@@ -1344,21 +1603,29 @@ async function launchOneJob(
           savedPath: r.savedPath,
           rawPath: r.rawPath,
         };
+        const item: HistoryItem = {
+          ...fullItem,
+          imageB64: previewB64,
+          previewOnly: previewB64 !== r.imageB64,
+        };
         persistHistoryItem(item).catch(() => undefined);
+        persistHistoryFullImage(item.id, r.imageB64).catch(() => undefined);
         // Always set the latest result as currentImage so the canvas updates
         // even when multiple jobs land within the same React tick.
+        const trimmed = trimHistory([item, ...store.getState().history]);
         store.setState({
-          currentImage: item,
-          history: [item, ...store.getState().history],
+          currentImage: fullItem,
+          history: trimmed,
           maskDataURL: null,
           annotations: [],
           tool: "pan",
           recentDurations: rd,
         });
+        persistTrimmedHistory(trimmed);
         // 桌面通知 —— 点击拉前台 + 直达详情抽屉
         if (willNotify) {
           tryNotify("Image Studio · 已完成", r.prompt ?? "", () => {
-            store.getState().openResultDetail(item);
+            store.getState().openResultDetail(fullItem);
           });
         }
         const total = store.getState().jobsTotal;
@@ -1366,16 +1633,17 @@ async function launchOneJob(
         store.getState().pushToast(
           total > 1
             ? `已完成 (${completedAfter}/${total}) · ${elapsedSec.toFixed(0)}s`
-            : `已${item.mode === "edit" ? "编辑" : "生成"} · ${elapsedSec.toFixed(0)}s`,
+            : `已${fullItem.mode === "edit" ? "编辑" : "生成"} · ${elapsedSec.toFixed(0)}s`,
           "success",
           6000,
-          { label: "查看详情", onClick: () => store.getState().openResultDetail(item) },
+          { label: "查看详情", onClick: () => store.getState().openResultDetail(fullItem) },
         );
         removeFromRunning();
       } catch (err: any) {
         store.setState({ errorMessage: `处理结果失败:${err?.message ?? err}` });
         removeFromRunning();
       }
+      })();
     });
     offError = EventsOn(`error:${jobId}`, (e: { message: string }) => {
       cleanup();

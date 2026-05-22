@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import queue
 import re
 import subprocess
@@ -348,6 +349,10 @@ def summarize_sse_line(line: str) -> Optional[str]:
 
 def copy_stream_to_file(process, raw_response_path: Path, lines: "queue.Queue[str]") -> None:
     with raw_response_path.open("w", encoding="utf-8", errors="replace", newline="") as output:
+        try:
+            os.chmod(raw_response_path, 0o600)
+        except OSError:
+            pass
         assert process.stdout is not None
         for line in process.stdout:
             output.write(line)
@@ -355,7 +360,16 @@ def copy_stream_to_file(process, raw_response_path: Path, lines: "queue.Queue[st
             lines.put(line)
 
 
-def build_curl_command(api_key: str, request_body_path: Path) -> list[str]:
+def build_curl_config(api_key: str) -> str:
+    headers = [
+        "Accept: */*",
+        "Content-Type: application/json",
+        f"Authorization: Bearer {api_key}",
+    ]
+    return "".join(f'header = "{header}"\n' for header in headers)
+
+
+def build_curl_command(request_body_path: Path, config_path: Path) -> list[str]:
     return [
         "curl.exe",
         "-sS",
@@ -370,12 +384,8 @@ def build_curl_command(api_key: str, request_body_path: Path) -> list[str]:
         "-X",
         "POST",
         f"{BASE_URL}/v1/responses",
-        "-H",
-        "Accept: */*",
-        "-H",
-        "Content-Type: application/json",
-        "-H",
-        f"Authorization: Bearer {api_key}",
+        "--config",
+        str(config_path),
         "--data-binary",
         f"@{request_body_path}",
     ]
@@ -405,7 +415,21 @@ def request_image_with_curl(
         request_body_path = Path(tmp.name)
         tmp.write(request_body)
 
-    command = build_curl_command(api_key, request_body_path)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        delete=False,
+        dir=raw_response_path.parent,
+        suffix=".headers.cfg",
+    ) as tmp_cfg:
+        config_path = Path(tmp_cfg.name)
+        tmp_cfg.write(build_curl_config(api_key))
+    try:
+        os.chmod(config_path, 0o600)
+    except OSError:
+        pass
+
+    command = build_curl_command(request_body_path, config_path)
 
     process = subprocess.Popen(
         command,
@@ -446,6 +470,7 @@ def request_image_with_curl(
     reader.join(timeout=5)
     stdout, stderr = process.communicate()
     request_body_path.unlink(missing_ok=True)
+    config_path.unlink(missing_ok=True)
 
     if process.returncode != 0:
         stderr = (stderr or "").strip() or (stdout or "").strip() or "curl.exe 未返回错误详情。"
@@ -511,6 +536,10 @@ def request_and_extract_with_retries(
 
 def save_image(image_b64: str, output_path: Path) -> Path:
     output_path.write_bytes(base64.b64decode(image_b64))
+    try:
+        os.chmod(output_path, 0o600)
+    except OSError:
+        pass
     return output_path.resolve()
 
 
@@ -587,7 +616,7 @@ def main() -> int:
 
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         output_dir = OUTPUT_DIR
-        output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
 
         print()
         action_label = "编辑图片" if mode == "edit" else "生成图片"

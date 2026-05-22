@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Eye, EyeOff, Info, Plug } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { useStudioStore } from "../../state/studioStore";
+import { cleanBaseURL, validateBaseURL } from "../../lib/security";
 
 export function UpstreamConfigModal({
   open,
@@ -40,29 +41,35 @@ export function UpstreamConfigModal({
   const draftTextModel = cur.textModelID;
   const draftImageModel = cur.imageModelID;
 
-  const canSave = !!draftBaseURL.trim() && !!draftApiKey.trim();
+  const baseURLError = draftBaseURL.trim() ? validateBaseURL(draftBaseURL) : null;
+  const canSave = !baseURLError && !!draftBaseURL.trim() && !!draftApiKey.trim();
 
-  function commit() {
+  async function commit() {
     const writeMode = (m: "responses" | "images", cfg: typeof cur) => {
       setField("apiMode", m);
-      setField("baseURL", cfg.baseURL.trim());
-      setAPIKey(cfg.apiKey.trim());
+      setField("baseURL", cleanBaseURL(cfg.baseURL));
       setField("textModelID", cfg.textModelID.trim());
       setField("imageModelID", cfg.imageModelID.trim());
     };
     writeMode("responses", draftResponses);
+    await setAPIKey(draftResponses.apiKey.trim());
     writeMode("images", draftImages);
+    await setAPIKey(draftImages.apiKey.trim());
     setField("apiMode", draftApiMode);
   }
 
-  function save() {
-    commit();
-    onClose();
+  async function save() {
+    try {
+      await commit();
+      onClose();
+    } catch (e) {
+      console.error(e);
+    }
   }
 
-  function testWithCurrentDraft() {
+  async function testWithCurrentDraft() {
     if (!canSave) return;
-    commit();
+    await commit();
     setTimeout(() => testAPIKey(), 0);
   }
 
@@ -82,14 +89,14 @@ export function UpstreamConfigModal({
                   key={o.id}
                   type="button"
                   onClick={() => setDraftApiMode(o.id)}
-                  className={`flex flex-col items-start gap-0.5 p-3 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex flex-col items-start gap-0.5 rounded-[16px] border p-3 text-left transition-colors ${
                     active
-                      ? "bg-emerald-500/10 ring-emerald-500/40 text-emerald-300"
-                      : "ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/30 text-zinc-700 dark:text-zinc-300"
+                      ? "border-[color:var(--accent)]/25 bg-[var(--accent-soft)] text-[var(--accent)]"
+                      : "border-black/[0.08] text-zinc-700 hover:border-[color:var(--accent)]/30 dark:border-white/[0.06] dark:text-zinc-300"
                   }`}
                 >
                   <span className="text-sm font-semibold">{o.title}</span>
-                  <span className={`text-[10px] ${active ? "text-emerald-400/80" : "text-zinc-500"}`}>{o.sub}</span>
+                  <span className={`text-[10px] ${active ? "text-[var(--accent)]/80" : "text-zinc-500"}`}>{o.sub}</span>
                 </button>
               );
             })}
@@ -105,7 +112,7 @@ export function UpstreamConfigModal({
           </Hint>
         </Field>
 
-        <div className="flex items-start gap-2 rounded-lg bg-emerald-500/8 ring-1 ring-emerald-500/25 px-3 py-2 text-[11px] text-emerald-300">
+        <div className="flex items-start gap-2 rounded-[16px] border border-[color:var(--accent)]/20 bg-[var(--accent-soft)] px-3 py-2 text-[11px] text-[var(--accent)]">
           <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span>
             下方编辑的是 <strong>{draftApiMode === "responses" ? "Responses API" : "Images API"}</strong> 的配置 —— 两种形态各存一份,切换时另一份不动。
@@ -121,8 +128,9 @@ export function UpstreamConfigModal({
             onChange={(e) => setCur({ baseURL: e.target.value })}
             spellCheck={false}
             autoFocus={!draftBaseURL}
-            className="w-full bg-white dark:bg-zinc-950 ring-1 ring-black/[0.08] dark:ring-white/[0.06] rounded-lg px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus-ring font-mono-token"
+            className="focus-ring w-full rounded-[14px] border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token"
           />
+          {baseURLError && <Hint>{baseURLError}</Hint>}
         </Field>
 
         {/* API Key */}
@@ -135,17 +143,18 @@ export function UpstreamConfigModal({
               onChange={(e) => setCur({ apiKey: e.target.value })}
               spellCheck={false}
               autoComplete="off"
-              className="w-full bg-white dark:bg-zinc-950 ring-1 ring-black/[0.08] dark:ring-white/[0.06] rounded-lg pl-3 pr-10 py-2.5 text-sm text-zinc-900 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus-ring font-mono-token"
+              className="focus-ring w-full rounded-[14px] border border-black/[0.08] bg-[var(--surface)] py-2.5 pl-3 pr-10 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token"
             />
             <button
               type="button"
               onClick={() => setShowKey((v) => !v)}
               title={showKey ? "隐藏" : "显示"}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-zinc-500 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
             >
               {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             </button>
           </div>
+          <Hint>保存后会写入系统凭据存储(Keychain / Credential Manager / Secret Service),不再放进浏览器 localStorage。</Hint>
         </Field>
 
         {draftApiMode === "responses" && (
@@ -156,7 +165,7 @@ export function UpstreamConfigModal({
               placeholder="留空=默认 gpt-5.5"
               onChange={(e) => setCur({ textModelID: e.target.value })}
               spellCheck={false}
-              className="w-full bg-white dark:bg-zinc-950 ring-1 ring-black/[0.08] dark:ring-white/[0.06] rounded-lg px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus-ring font-mono-token"
+              className="focus-ring w-full rounded-[14px] border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token"
             />
           </Field>
         )}
@@ -170,7 +179,7 @@ export function UpstreamConfigModal({
               : "留空=默认 gpt-image-2(直接传给 Images API)"}
             onChange={(e) => setCur({ imageModelID: e.target.value })}
             spellCheck={false}
-            className="w-full bg-white dark:bg-zinc-950 ring-1 ring-black/[0.08] dark:ring-white/[0.06] rounded-lg px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus-ring font-mono-token"
+            className="focus-ring w-full rounded-[14px] border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token"
           />
         </Field>
 
@@ -178,7 +187,7 @@ export function UpstreamConfigModal({
           type="button"
           onClick={testWithCurrentDraft}
           disabled={!canSave || isTestingKey}
-          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full inline-flex items-center justify-center gap-2 rounded-full border border-black/[0.08] px-3 py-2.5 text-sm text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-zinc-300"
         >
           <Plug className={`w-3.5 h-3.5 ${isTestingKey ? "animate-spin" : ""}`} />
           {isTestingKey ? "测试中..." : "测试连接(会先保存草稿)"}
@@ -188,7 +197,7 @@ export function UpstreamConfigModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            className="rounded-full border border-black/[0.08] px-4 py-2 text-sm text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06]"
           >
             稍后再配
           </button>
@@ -196,7 +205,7 @@ export function UpstreamConfigModal({
             type="button"
             onClick={save}
             disabled={!canSave}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-colors disabled:bg-zinc-200 dark:disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed"
+            className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-2)] disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500 dark:disabled:bg-zinc-800"
           >
             保存
           </button>

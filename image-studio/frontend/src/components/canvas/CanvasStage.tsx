@@ -3,11 +3,12 @@ import { Stage, Layer, Image as KonvaImage, Line, Rect, Arrow, Text, Group } fro
 import Konva from "konva";
 import { useStudioStore } from "../../state/studioStore";
 import { Annotation } from "../../types/domain";
+import { isMac } from "../../lib/platform";
 
 async function copyImageToClipboard(b64: string): Promise<boolean> {
   try {
-    const res = await fetch(`data:image/png;base64,${b64}`);
-    const blob = await res.blob();
+    const dataURL = `data:image/png;base64,${b64}`;
+    const blob = await (await fetch(dataURL)).blob();
     if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) return false;
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
     return true;
@@ -25,12 +26,29 @@ function useImageFromB64(b64: string | undefined): HTMLImageElement | null {
     if (!b64) { setImg(null); return; }
     setImg(null); // drop the stale element immediately
     const el = new Image();
+    const objectURL = b64ToObjectURL(b64);
+    if (!objectURL) return;
     el.onload = () => setImg(el);
     el.onerror = () => setImg(null);
-    el.src = `data:image/png;base64,${b64}`;
-    return () => { el.onload = null; el.onerror = null; };
+    el.src = objectURL;
+    return () => {
+      el.onload = null;
+      el.onerror = null;
+      URL.revokeObjectURL(objectURL);
+    };
   }, [b64]);
   return img;
+}
+
+function b64ToObjectURL(b64: string): string | null {
+  try {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+  } catch {
+    return null;
+  }
 }
 
 import type { Stroke } from "../../state/studioStore";
@@ -290,38 +308,16 @@ export function CanvasStage() {
     }
   }
 
-  // Export mask layer as PNG dataURL when strokes change.
-  // Paint strokes draw white onto black; erase strokes draw black (cancelling).
+  // Keep the store flag in sync so submit can cheaply know whether any mask
+  // exists, but defer the expensive PNG export until the user actually submits.
   useEffect(() => {
     if (!image || strokes.length === 0) {
       setMaskDataURL(null);
       return;
     }
-    const c = document.createElement("canvas");
-    c.width = image.width;
-    c.height = image.height;
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    let hasWhite = false;
-    for (const s of strokes) {
-      ctx.strokeStyle = s.erase ? "#000" : "#fff";
-      ctx.lineWidth = s.size;
-      ctx.beginPath();
-      for (let i = 0; i < s.points.length; i += 2) {
-        const x = s.points[i];
-        const y = s.points[i + 1];
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      if (!s.erase) hasWhite = true;
-    }
-    setMaskDataURL(hasWhite ? c.toDataURL("image/png") : null);
-  }, [strokes, image]);
+    const hasWhite = strokes.some((s) => !s.erase);
+    setMaskDataURL(hasWhite ? "__PENDING_MASK__" : null);
+  }, [strokes, image, setMaskDataURL]);
 
   function resetView() {
     setUserView(null);
@@ -347,7 +343,7 @@ export function CanvasStage() {
       const meta = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
 
-      // Ctrl-modified
+      // Primary-modifier shortcuts
       if (meta && k === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if (meta && ((k === "z" && e.shiftKey) || k === "y")) { e.preventDefault(); redo(); return; }
 
@@ -374,8 +370,8 @@ export function CanvasStage() {
         return;
       }
 
-      // F11 → toggle fullscreen
-      if (k === "f11") {
+      // F11 on non-macOS, or Control+Command+F on macOS → toggle fullscreen.
+      if ((!isMac && k === "f11") || (isMac && e.ctrlKey && e.metaKey && k === "f")) {
         e.preventDefault();
         const { fullscreen } = useStudioStore.getState();
         setField("fullscreen", !fullscreen);
@@ -388,7 +384,7 @@ export function CanvasStage() {
         copyImageToClipboard(currentImage.imageB64).then((ok) => {
           const t = useStudioStore.getState().pushToast;
           if (ok) t("已复制图片到剪贴板", "success");
-          else t("复制失败,浏览器拒绝写剪贴板", "error");
+          else t("复制失败,当前运行环境拒绝写剪贴板", "error");
         });
         return;
       }

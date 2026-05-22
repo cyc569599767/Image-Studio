@@ -2,11 +2,13 @@ package main
 
 import (
 	"embed"
+	"runtime"
 
 	"image-studio/backend"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
+	wailsmac "github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
@@ -15,8 +17,7 @@ var assets embed.FS
 
 func main() {
 	svc := backend.NewService()
-
-	err := wails.Run(&options.App{
+	appOptions := &options.App{
 		Title:     "Image Studio",
 		Width:     1440,
 		Height:    980,
@@ -30,7 +31,18 @@ func main() {
 		Bind: []interface{}{
 			svc,
 		},
-	})
+	}
+
+	if runtime.GOOS == "darwin" {
+		appOptions.Mac = &wailsmac.Options{
+			Appearance:           wailsmac.DefaultAppearance,
+			TitleBar:             wailsmac.TitleBarHiddenInset(),
+			WebviewIsTransparent: false,
+			WindowIsTranslucent:  false,
+		}
+	}
+
+	err := wails.Run(appOptions)
 
 	if err != nil {
 		println("Error:", err.Error())

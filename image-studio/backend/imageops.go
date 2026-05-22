@@ -25,22 +25,30 @@ type ImageTransformResult struct {
 // clockwise and writes the result to imports/ as a new file. Original is left
 // untouched.
 func (s *Service) RotateImage(path string, degrees int) (ImageTransformResult, error) {
-	deg := ((degrees%360)+360)%360
+	deg := ((degrees % 360) + 360) % 360
 	if deg != 0 && deg != 90 && deg != 180 && deg != 270 {
 		return ImageTransformResult{}, errors.New("rotation must be a multiple of 90 degrees")
 	}
-	src, err := loadImage(path)
+	allowed, err := s.ensureManagedReadablePath(path, managedImageFile)
+	if err != nil {
+		return ImageTransformResult{}, err
+	}
+	src, err := loadImage(allowed)
 	if err != nil {
 		return ImageTransformResult{}, err
 	}
 	rotated := rotate(src, deg)
-	out, err := saveTransform(rotated, path, fmt.Sprintf("rot%d", deg))
+	out, err := saveTransform(rotated, allowed, fmt.Sprintf("rot%d", deg))
 	return ImageTransformResult{Path: out}, err
 }
 
 // FlipImage flips horizontally (true) or vertically (false).
 func (s *Service) FlipImage(path string, horizontal bool) (ImageTransformResult, error) {
-	src, err := loadImage(path)
+	allowed, err := s.ensureManagedReadablePath(path, managedImageFile)
+	if err != nil {
+		return ImageTransformResult{}, err
+	}
+	src, err := loadImage(allowed)
 	if err != nil {
 		return ImageTransformResult{}, err
 	}
@@ -49,7 +57,7 @@ func (s *Service) FlipImage(path string, horizontal bool) (ImageTransformResult,
 	if !horizontal {
 		suffix = "flipv"
 	}
-	out, err := saveTransform(flipped, path, suffix)
+	out, err := saveTransform(flipped, allowed, suffix)
 	return ImageTransformResult{Path: out}, err
 }
 
@@ -58,7 +66,11 @@ func (s *Service) CropImage(path string, x, y, w, h int) (ImageTransformResult, 
 	if w <= 0 || h <= 0 {
 		return ImageTransformResult{}, errors.New("crop rect must have positive size")
 	}
-	src, err := loadImage(path)
+	allowed, err := s.ensureManagedReadablePath(path, managedImageFile)
+	if err != nil {
+		return ImageTransformResult{}, err
+	}
+	src, err := loadImage(allowed)
 	if err != nil {
 		return ImageTransformResult{}, err
 	}
@@ -69,7 +81,7 @@ func (s *Service) CropImage(path string, x, y, w, h int) (ImageTransformResult, 
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
 	draw.Draw(dst, dst.Bounds(), src, rect.Min, draw.Src)
-	out, err := saveTransform(dst, path, "crop")
+	out, err := saveTransform(dst, allowed, "crop")
 	return ImageTransformResult{Path: out}, err
 }
 
@@ -139,14 +151,14 @@ func saveTransform(img image.Image, originalPath, suffix string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, secureDirMode); err != nil {
 		return "", err
 	}
 	base := filepath.Base(originalPath)
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
 	name := fmt.Sprintf("%s-%s-%s.png", time.Now().Format("20060102-150405"), sanitiseName(stem), suffix)
 	out := filepath.Join(dir, name)
-	f, err := os.Create(out)
+	f, err := os.OpenFile(out, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, secureFileMode)
 	if err != nil {
 		return "", err
 	}

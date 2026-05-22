@@ -23,27 +23,27 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[9100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[9100] flex items-center justify-center bg-black/18 p-5 backdrop-blur-md"
       onClick={onClose}
     >
       <div
         style={{ width }}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[85vh] flex flex-col rounded-2xl bg-white dark:bg-zinc-900 ring-1 ring-black/[0.08] dark:ring-white/[0.06] shadow-2xl overflow-hidden"
+        className="flex max-h-[86vh] flex-col overflow-hidden rounded-[22px] border border-black/[0.08] bg-white/92 shadow-[0_30px_80px_rgb(15_23_42_/_0.18)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-zinc-900/92"
       >
         {title && (
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-black/[0.06] dark:border-white/[0.04]">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 m-0">{title}</h3>
+          <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-3.5 dark:border-white/[0.04]">
+            <h3 className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-zinc-900 dark:text-zinc-100">{title}</h3>
             <button
               onClick={onClose}
               title="关闭 (Esc)"
-              className="p-1 -mr-1 rounded text-zinc-500 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-100"
+              className="-mr-1 rounded-full p-1.5 text-zinc-500 hover:bg-black/[0.05] hover:text-zinc-900 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
-        <div className="p-5 overflow-y-auto">{children}</div>
+        <div className="overflow-y-auto p-5">{children}</div>
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -28,12 +27,16 @@ func RequestAndExtract(
 		return ImageResult{}, err
 	}
 
-	baseURL := strings.TrimRight(opts.BaseURL, "/")
+	baseURL := strings.TrimSpace(opts.BaseURL)
 	if baseURL == "" {
-		baseURL = strings.TrimRight(BaseURL, "/")
+		baseURL = strings.TrimSpace(BaseURL)
 	}
 	if baseURL == "" {
 		return ImageResult{}, errors.New("未配置上游 BASE_URL,请在「设置 → 上游 BASE_URL」中填入兼容 Responses API 的中转站地址")
+	}
+	baseURL, err = ValidateBaseURL(baseURL)
+	if err != nil {
+		return ImageResult{}, err
 	}
 	req := Request{
 		URL:     baseURL + "/v1/responses",
@@ -41,17 +44,14 @@ func RequestAndExtract(
 		Payload: payload,
 	}
 
-	// Capture raw response in memory AND forward to rawSink so we can parse it
-	// even when the caller only kept it as a file on disk.
-	var buf bytes.Buffer
-	tee := io.MultiWriter(rawSink, &buf)
+	collector := newResponseCollector(rawSink)
 
 	progressCh := make(chan string, 16)
 	done := make(chan error, 1)
 	startedAt := time.Now()
 
 	go func() {
-		done <- transport.Stream(ctx, req, tee, progressCh)
+		done <- transport.Stream(ctx, req, collector, progressCh)
 		close(progressCh)
 	}()
 
@@ -81,7 +81,7 @@ loop:
 		case <-ticker.C:
 			if onProgress != nil {
 				elapsed := int(time.Since(startedAt).Seconds())
-				onProgress(lastStage, elapsed, int64(buf.Len()))
+				onProgress(lastStage, elapsed, collector.bytesReceived())
 			}
 		}
 	}
@@ -89,19 +89,14 @@ loop:
 	if streamErr != nil {
 		// Stream errored mid-flight。但常见场景:上游已经把 final event(含完整
 		// base64 result)发完之后,Cloudflare/上游 nginx 在 idle 阶段才把连接 reset。
-		// 这时 buf 里其实有完整图;不该浪费一次重试。先 parse 试试,能拿出图就当成功。
-		if result, perr := ExtractImageResult(buf.String()); perr == nil && result.ImageB64 != "" {
+		// 这时 collector 里其实已经提取到完整图;不该浪费一次重试。
+		if result, perr := collector.result(); perr == nil && result.ImageB64 != "" {
 			return result, nil
 		}
 		return ImageResult{}, streamErr
 	}
 
-	rawText := buf.String()
-	result, err := ExtractImageResult(rawText)
-	if err != nil {
-		return ImageResult{}, err
-	}
-	return result, nil
+	return collector.result()
 }
 
 // RequestAndExtractWithRetries wraps RequestAndExtract with the same retry
@@ -141,7 +136,7 @@ func responsesAPIWithRetries(
 		onLog = func(string) {}
 	}
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o700); err != nil {
 		return ImageResult{}, "", fmt.Errorf("create output dir: %w", err)
 	}
 
@@ -153,7 +148,7 @@ func responsesAPIWithRetries(
 		lastPath = rawPath
 		onLog(fmt.Sprintf("第 %d/%d 次请求...", attempt, MaxAttempts))
 
-		f, err := os.Create(rawPath)
+		f, err := os.OpenFile(rawPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 		if err != nil {
 			return ImageResult{}, lastPath, fmt.Errorf("create raw response file: %w", err)
 		}
@@ -230,7 +225,7 @@ func imagesAPIWithRetries(
 	if onLog == nil {
 		onLog = func(string) {}
 	}
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o700); err != nil {
 		return ImageResult{}, "", fmt.Errorf("create output dir: %w", err)
 	}
 
@@ -242,7 +237,7 @@ func imagesAPIWithRetries(
 		lastPath = rawPath
 		onLog(fmt.Sprintf("[Images API] 第 %d/%d 次请求...", attempt, MaxAttempts))
 
-		f, err := os.Create(rawPath)
+		f, err := os.OpenFile(rawPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 		if err != nil {
 			return ImageResult{}, lastPath, fmt.Errorf("create raw response file: %w", err)
 		}

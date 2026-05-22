@@ -8,7 +8,7 @@ function fmtBytes(b: number): string {
 }
 
 export function StatusBar() {
-  const { isRunning, progress, currentImage, logLines, viewZoom, recentDurations, jobsTotal, jobsCompleted, runningJobs } = useStudioStore();
+  const { isRunning, progress, currentImage, lastLogLine, viewZoom, recentDurations, jobsTotal, jobsCompleted, runningJobs } = useStudioStore();
   const zoomLabel = currentImage ? `${Math.round(viewZoom * 100)}%` : "";
   const avg = recentDurations.length > 0
     ? recentDurations.reduce((a, b) => a + b, 0) / recentDurations.length
@@ -19,20 +19,20 @@ export function StatusBar() {
 
   if (isRunning) {
     return (
-      <div className="relative flex items-center gap-3 px-3 py-2 text-[11px] text-zinc-700 dark:text-zinc-300 border-t border-black/[0.08] dark:border-white/[0.06] bg-white/70 dark:bg-zinc-950/40 backdrop-blur-sm overflow-hidden">
-        <Loader2 className="w-3 h-3 text-emerald-400 animate-spin shrink-0" />
+      <div className="relative flex items-center gap-3 overflow-hidden border-t border-black/[0.06] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-700 backdrop-blur-2xl dark:border-white/[0.06] dark:text-zinc-300">
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--accent)]" />
         <span className="font-medium">
           {progress ? `${progress.stage} · ${progress.elapsed}s · ${fmtBytes(progress.bytes)}` : "正在请求..."}
         </span>
         {jobsTotal > 1 && (
-          <span className="text-emerald-400 font-medium">
+          <span className="font-medium text-[var(--accent)]">
             并发 {runningJobs.length} · {jobsCompleted}/{jobsTotal}
           </span>
         )}
         {eta !== null && <span className="text-zinc-500">≈ 剩余 {eta}s</span>}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-emerald-500/40 animate-pulse" />
-        <span className="text-zinc-500 truncate max-w-[30%] ml-auto" title={logLines[logLines.length - 1] ?? ""}>
-          {logLines[logLines.length - 1] ?? ""}
+        <div className="absolute bottom-0 left-0 right-0 h-px animate-pulse bg-[color:var(--accent)]/35" />
+        <span className="text-zinc-500 truncate max-w-[30%] ml-auto" title={lastLogLine}>
+          {lastLogLine}
         </span>
       </div>
     );
@@ -47,8 +47,8 @@ export function StatusBar() {
     if (currentImage.seed) metaParts.push(`seed ${currentImage.seed}`);
     if (currentImage.styleTag) metaParts.push(`#${currentImage.styleTag}`);
     return (
-      <div className="flex items-center gap-3 px-3 py-2 text-[11px] text-zinc-600 dark:text-zinc-400 border-t border-black/[0.08] dark:border-white/[0.06] bg-white/70 dark:bg-zinc-950/40 backdrop-blur-sm overflow-hidden">
-        <span className="inline-flex items-center gap-1.5 text-emerald-500 shrink-0">
+      <div className="flex items-center gap-3 overflow-hidden border-t border-black/[0.06] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-600 backdrop-blur-2xl dark:border-white/[0.06] dark:text-zinc-400">
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-[var(--accent)]">
           <CheckCircle2 className="w-3 h-3" /> <span className="font-medium">{metaParts.join(" · ")}</span>
         </span>
         <span className="text-zinc-500 font-mono-token">{created}</span>
@@ -62,7 +62,7 @@ export function StatusBar() {
     );
   }
   return (
-    <div className="px-3 py-2 text-[11px] text-zinc-500 border-t border-black/[0.08] dark:border-white/[0.06] bg-white/70 dark:bg-zinc-950/40 backdrop-blur-sm">
+    <div className="border-t border-black/[0.06] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-500 backdrop-blur-2xl dark:border-white/[0.06]">
       准备就绪
     </div>
   );

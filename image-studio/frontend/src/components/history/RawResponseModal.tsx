@@ -39,17 +39,17 @@ export function RawResponseModal({ path, onClose }: { path: string; onClose: () 
         <code className="font-mono-token break-all text-zinc-600 dark:text-zinc-400">{path}</code>
         <button
           onClick={copyAll}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors shrink-0"
+          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.08] px-2.5 py-1.5 text-xs text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300"
         >
           <Copy className="w-3 h-3" /> 复制全文
         </button>
       </div>
       {loading && <div className="text-zinc-500 p-3 text-sm">读取中...</div>}
       {error && (
-        <div className="rounded-lg bg-red-500/10 ring-1 ring-red-500/30 p-3 text-sm text-red-400">{error}</div>
+        <div className="rounded-[16px] border border-red-500/25 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
       )}
       {!loading && !error && (
-        <pre className="font-mono-token bg-zinc-50 dark:bg-zinc-950 ring-1 ring-black/[0.08] dark:ring-white/[0.06] p-3 rounded-lg max-h-[55vh] overflow-auto text-[11px] leading-relaxed whitespace-pre-wrap break-all text-zinc-600 dark:text-zinc-400">
+        <pre className="font-mono-token max-h-[55vh] overflow-auto whitespace-pre-wrap break-all rounded-[16px] border border-black/[0.08] bg-[var(--surface)] p-3 text-[11px] leading-relaxed text-zinc-600 dark:border-white/[0.06] dark:text-zinc-400">
           {text}
         </pre>
       )}

@@ -4,8 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* 自托管字体:中文 HarmonyOS Sans SC(Regular + Medium)、英文/等宽 JetBrains Mono。
-   两个 HarmonyOS 文件按各自字重声明,让 Tailwind 的 font-normal / font-medium
-   都能命中真正的 ttf。body 默认走 Medium —— Regular 在小字 + 暗色下偏淡。 */
+   macOS 会优先走 SF Pro / PingFang SC,其他平台再回退到仓库自带字体。 */
 @font-face {
   font-family: "JetBrains Mono";
   font-style: normal;
@@ -32,67 +31,82 @@
    等所有组件改完,这些变量会变成无人引用的 dead code,可以删。
    关键约束:这里的 CSS 变量都映射到 zinc + emerald 的对应色,实现「老组件不动也好看」。 */
 :root {
-  --accent: oklch(69.6% 0.17 162.48);       /* emerald-500 #10b981 */
-  --accent-2: oklch(75% 0.18 162);          /* emerald-400 */
-  --accent-soft: oklch(95% 0.05 162 / 0.18);
-  --bg: #fafafa;
-  --bg-2: #f4f4f5;
+  --accent: #007aff;
+  --accent-2: #409cff;
+  --accent-soft: rgb(0 122 255 / 0.1);
+  --bg: #f5f5f7;
+  --bg-2: #ececf1;
   --panel: #ffffff;
-  --panel-2: #fafafa;
-  --surface: #f4f4f5;
-  --surface-2: #e4e4e7;
-  --border: rgb(0 0 0 / 0.08);
-  --border-2: rgb(0 0 0 / 0.12);
-  --text: #18181b;
-  --text-muted: #71717a;
-  --text-dim: #a1a1aa;
-  --danger: #ef4444;
-  --danger-soft: rgb(239 68 68 / 0.08);
-  --success: #10b981;
-  --canvas-bg: #f4f4f5;
-  --canvas-tile: #e4e4e7;
+  --panel-2: #fbfbfd;
+  --surface: #f2f2f7;
+  --surface-2: #e5e5ea;
+  --sidebar: rgb(255 255 255 / 0.78);
+  --inspector: rgb(255 255 255 / 0.7);
+  --toolbar: rgb(255 255 255 / 0.76);
+  --border: rgb(60 60 67 / 0.16);
+  --border-2: rgb(60 60 67 / 0.22);
+  --text: #111111;
+  --text-muted: rgb(60 60 67 / 0.72);
+  --text-dim: rgb(60 60 67 / 0.48);
+  --danger: #ff3b30;
+  --danger-soft: rgb(255 59 48 / 0.1);
+  --success: #34c759;
+  --canvas-bg: #eef0f5;
+  --canvas-tile: #dde2eb;
   --font-scale: 1;
   --on-accent-soft: var(--accent);
-  --btn-secondary-bg: #f4f4f5;
-  --btn-secondary-bg-hover: #e4e4e7;
-  --tool-hover-bg: rgb(16 185 129 / 0.1);
+  --btn-secondary-bg: #f2f2f7;
+  --btn-secondary-bg-hover: #e7e8ee;
+  --tool-hover-bg: rgb(0 122 255 / 0.08);
   --tool-hover-text: var(--accent);
-  --error-text: #b91c1c;
-  --error-border: rgb(239 68 68 / 0.3);
-  --shadow-card: none;
-  --shadow-card-hover: none;
+  --error-text: #c1271d;
+  --error-border: rgb(255 59 48 / 0.22);
+  --shadow-card: 0 10px 30px rgb(15 23 42 / 0.06);
+  --shadow-card-hover: 0 18px 48px rgb(15 23 42 / 0.09);
   --pink: var(--accent);
   --pink-soft: var(--accent-soft);
   --gradient-primary: var(--accent);
   --gradient-primary-hover: var(--accent-2);
   --gradient-card: transparent;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 }
 
-/* 暗色模式(默认):全 zinc-950/900 系底 + emerald 强调 */
+/* 暗色模式 */
 :root.dark {
-  --bg: #09090b;
-  --bg-2: #18181b;
-  --panel: #18181b;
-  --panel-2: #09090b;
-  --surface: #27272a;
-  --surface-2: #3f3f46;
-  --border: rgb(255 255 255 / 0.06);
-  --border-2: rgb(255 255 255 / 0.1);
-  --text: #fafafa;
-  --text-muted: #a1a1aa;
-  --text-dim: #71717a;
-  --danger: #f87171;
-  --danger-soft: rgb(248 113 113 / 0.1);
-  --success: #34d399;
-  --canvas-bg: #18181b;
-  --canvas-tile: #27272a;
-  --on-accent-soft: oklch(85% 0.12 162);
-  --btn-secondary-bg: #27272a;
-  --btn-secondary-bg-hover: #3f3f46;
-  --tool-hover-bg: rgb(16 185 129 / 0.15);
-  --tool-hover-text: oklch(85% 0.12 162);
-  --error-text: #fca5a5;
-  --error-border: rgb(248 113 113 / 0.4);
+  --accent: #0a84ff;
+  --accent-2: #5eb0ff;
+  --accent-soft: rgb(10 132 255 / 0.18);
+  --bg: #131315;
+  --bg-2: #1c1c1e;
+  --panel: #232326;
+  --panel-2: #1c1c1f;
+  --surface: #2c2c2f;
+  --surface-2: #3a3a3d;
+  --sidebar: rgb(36 36 39 / 0.82);
+  --inspector: rgb(34 34 37 / 0.78);
+  --toolbar: rgb(28 28 31 / 0.82);
+  --border: rgb(84 84 88 / 0.52);
+  --border-2: rgb(84 84 88 / 0.72);
+  --text: #f5f5f7;
+  --text-muted: rgb(235 235 245 / 0.68);
+  --text-dim: rgb(235 235 245 / 0.4);
+  --danger: #ff453a;
+  --danger-soft: rgb(255 69 58 / 0.14);
+  --success: #30d158;
+  --canvas-bg: #1a1a1d;
+  --canvas-tile: #2b2d31;
+  --on-accent-soft: #9ed0ff;
+  --btn-secondary-bg: #323236;
+  --btn-secondary-bg-hover: #3c3c41;
+  --tool-hover-bg: rgb(10 132 255 / 0.16);
+  --tool-hover-text: #c9e3ff;
+  --error-text: #ffb3ad;
+  --error-border: rgb(255 69 58 / 0.34);
+  --shadow-card: 0 18px 46px rgb(0 0 0 / 0.38);
+  --shadow-card-hover: 0 24px 60px rgb(0 0 0 / 0.46);
 }
 
 /* 老 data-theme 选择器映射到 .dark class,平滑过渡。 */
@@ -112,17 +126,13 @@ html, body, #root {
 }
 
 body {
-  /* UI 文本走 HarmonyOS Sans SC(中文 + Latin 全字符);代码/数字/路径才走
-     JetBrains Mono(显式加 .font-mono-token 或 <code>/<pre>)。
-     默认字重 500(Medium)—— Regular 在暗色 + 13~14px 下显瘦。 */
-  font-family: "HarmonyOS Sans SC",
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-weight: 500;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro SC",
+    "PingFang SC", "HarmonyOS Sans SC", "Segoe UI", sans-serif;
+  font-weight: 400;
   background: var(--bg);
   color: var(--text);
-  /* 不开 -webkit-font-smoothing: antialiased —— 在 Windows 上会跳过 ClearType
-     subpixel rendering,让 CJK 看起来「淡淡的雾」。默认走 subpixel-antialiased。 */
+  line-height: 1.45;
   user-select: none;
 }
 button, input, textarea, select { font-family: inherit; }
@@ -131,21 +141,21 @@ button, input, textarea, select { font-family: inherit; }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: rgb(212 212 216);
+  background: rgb(193 193 199);
   border-radius: 8px;
   border: 2px solid var(--bg);
 }
-*::-webkit-scrollbar-thumb:hover { background: rgb(161 161 170); }
+*::-webkit-scrollbar-thumb:hover { background: rgb(143 143 149); }
 html.dark *::-webkit-scrollbar-thumb {
-  background: rgb(63 63 70);
+  background: rgb(82 82 88);
   border-color: var(--bg);
 }
-html.dark *::-webkit-scrollbar-thumb:hover { background: rgb(82 82 91); }
+html.dark *::-webkit-scrollbar-thumb:hover { background: rgb(108 108 114); }
 
 /* Emerald 高亮的文字选区 */
 ::selection {
-  background: rgb(16 185 129 / 0.25);
-  color: #ecfdf5;
+  background: rgb(0 122 255 / 0.22);
+  color: inherit;
 }
 
 /* JetBrains Mono 等宽场景的小工具类,留给数字 / token / 路径用 */
@@ -159,12 +169,16 @@ html.dark *::-webkit-scrollbar-thumb:hover { background: rgb(82 82 91); }
 /* 通用 focus-ring(emerald glow)*/
 .focus-ring {
   outline: none;
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
 }
 .focus-ring:focus-visible {
-  border-color: rgb(16 185 129 / 0.6);
-  box-shadow: 0 0 0 3px rgb(16 185 129 / 0.15);
+  border-color: rgb(0 122 255 / 0.55);
+  box-shadow: 0 0 0 3px rgb(0 122 255 / 0.16);
 }
+
+/* Wails desktop drag regions for frameless/hidden-titlebar windows. */
+.drag-region { --wails-draggable: drag; }
+.no-drag { --wails-draggable: no-drag; }
 
 /* Spin 动画(loader)*/
 @keyframes spin-emerald { to { transform: rotate(360deg); } }

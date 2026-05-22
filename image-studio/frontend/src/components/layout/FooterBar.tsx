@@ -20,16 +20,16 @@ export function FooterBar() {
   }
 
   return (
-    <footer className="h-8 px-4 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-xl border-t border-black/[0.08] dark:border-white/[0.06]">
+    <footer className="flex min-h-10 items-center justify-between border-t border-black/[0.06] bg-[var(--toolbar)] px-4 text-[11px] text-zinc-500 backdrop-blur-2xl dark:border-white/[0.06] dark:text-zinc-400">
       <div className="flex items-center gap-1">
         <FooterBtn onClick={() => OpenOutputDir().catch(() => undefined)}>
-          <Folder className="w-3 h-3" /> 输出目录
+          <Folder className="h-3 w-3" /> 输出目录
         </FooterBtn>
         <FooterBtn onClick={() => open(REPO_URL)}>
-          <Github className="w-3 h-3" /> GitHub
+          <Github className="h-3 w-3" /> GitHub
         </FooterBtn>
         <FooterBtn onClick={() => open(ISSUES_URL)}>
-          <MessageSquare className="w-3 h-3" /> 反馈
+          <MessageSquare className="h-3 w-3" /> 反馈
         </FooterBtn>
       </div>
       <div className="flex items-center gap-3">
@@ -46,8 +46,8 @@ export function FooterBar() {
           <>
             <span className="opacity-40">·</span>
             <span className="flex items-baseline gap-1">
-              <span className="opacity-70">并发</span>
-              <span className="font-medium text-emerald-500 tabular-nums">{runningJobs.length}</span>
+            <span className="opacity-70">并发</span>
+              <span className="font-medium text-[var(--accent)] tabular-nums">{runningJobs.length}</span>
             </span>
           </>
         )}
@@ -55,9 +55,9 @@ export function FooterBar() {
       <div className="flex items-center gap-2">
         <span>{isRunning ? "运行中" : "就绪"}</span>
         <span
-          className={`w-1.5 h-1.5 rounded-full ${
+          className={`h-1.5 w-1.5 rounded-full ${
             isRunning
-              ? "bg-emerald-500 shadow-[0_0_6px_rgb(16_185_129_/_0.8)] animate-pulse"
+              ? "bg-[var(--accent)] shadow-[0_0_6px_rgb(0_122_255_/_0.6)] animate-pulse"
               : "bg-zinc-400 dark:bg-zinc-600"
           }`}
         />
@@ -72,7 +72,7 @@ function FooterBtn({ children, onClick }: { children: React.ReactNode; onClick: 
     <button
       type="button"
       onClick={onClick}
-      className="px-2 py-1 inline-flex items-center gap-1 rounded hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors hover:bg-black/[0.04] hover:text-zinc-900 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
     >
       {children}
     </button>
