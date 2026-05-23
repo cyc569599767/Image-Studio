@@ -10,56 +10,18 @@ import { StatusBar } from "./components/canvas/StatusBar";
 import { HistoryRail } from "./components/history/HistoryRail";
 import { ToastContainer } from "./components/common/ToastContainer";
 import { useStudioStore } from "./state/studioStore";
-import { isMac, usesAppleUI } from "./lib/platform";
+import { isMac } from "./lib/platform";
 
 const UpstreamConfigModal = lazy(() => import("./components/panel/UpstreamConfigModal").then((m) => ({ default: m.UpstreamConfigModal })));
 const ResultDetailDrawer = lazy(() => import("./components/panel/ResultDetailDrawer").then((m) => ({ default: m.ResultDetailDrawer })));
+const SettingsPanel = lazy(() => import("./components/panel/SettingsPanel").then((m) => ({ default: m.SettingsPanel })));
 
 function App() {
   const bootstrap = useStudioStore((s) => s.bootstrap);
   const importImageFile = useStudioStore((s) => s.importImageFile);
   const fullscreen = useStudioStore((s) => s.fullscreen);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   useEffect(() => { bootstrap(); }, [bootstrap]);
-
-  // Liquid Glass needs a moving light source so the material reacts to the
-  // person rather than sitting as a static translucent layer.
-  useEffect(() => {
-    if (!usesAppleUI || typeof window === "undefined") return;
-    const root = document.documentElement;
-    let raf = 0;
-    let x = window.innerWidth / 2;
-    let y = window.innerHeight / 2;
-
-    const write = () => {
-      raf = 0;
-      root.style.setProperty("--lg-pointer-x", `${Math.round(x)}px`);
-      root.style.setProperty("--lg-pointer-y", `${Math.round(y)}px`);
-      root.style.setProperty("--lg-pointer-xp", `${Math.round((x / Math.max(window.innerWidth, 1)) * 100)}%`);
-      root.style.setProperty("--lg-pointer-yp", `${Math.round((y / Math.max(window.innerHeight, 1)) * 100)}%`);
-    };
-    const queueWrite = () => {
-      if (!raf) raf = window.requestAnimationFrame(write);
-    };
-    const onPointerMove = (e: PointerEvent) => {
-      x = e.clientX;
-      y = e.clientY;
-      queueWrite();
-    };
-    const onResize = () => {
-      x = window.innerWidth / 2;
-      y = window.innerHeight / 2;
-      queueWrite();
-    };
-
-    write();
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("resize", onResize);
-      if (raf) window.cancelAnimationFrame(raf);
-    };
-  }, []);
 
   // Global app-level shortcuts. Canvas-scoped shortcuts (undo/redo, tool
   // switching, Esc) stay in CanvasStage so they don't fire when no image is up.
@@ -158,7 +120,7 @@ function App() {
     <div className="app-root relative">
       <div className="liquid-ambient" aria-hidden="true" />
 
-      <AppHeader />
+      <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
       <WorkspaceBar />
       <div className={`studio ${fullscreen ? "fullscreen" : ""}`}>
         <ControlPanel />
@@ -182,6 +144,9 @@ function App() {
       </div>
       <FooterBar />
       <UpstreamConfigGate />
+      <Suspense fallback={null}>
+        <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      </Suspense>
       <Suspense fallback={null}>
         <ResultDetailDrawer />
       </Suspense>

@@ -51,12 +51,20 @@ export function normalizeConcurrencyLimit(value: unknown): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
+export function normalizeBatchCount(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(9, Math.floor(n)));
+}
+
 export function patchWorkspaceRuntime(workspaces: Workspace[], workspaceId: string, patch: WorkspacePatch): Workspace[] {
   return workspaces.map((w) => {
     if (w.id !== workspaceId) return w;
     const next: Workspace = { ...w };
     if (patch.name !== undefined) next.name = patch.name;
     if (patch.currentImageId !== undefined) next.currentImageId = patch.currentImageId;
+    if (patch.batchResultIds !== undefined) next.batchResultIds = patch.batchResultIds;
+    if (patch.resultGridOpen !== undefined) next.resultGridOpen = patch.resultGridOpen;
     if (patch.runningJobs !== undefined) next.runningJobIds = patch.runningJobs;
     if (patch.runningJobIds !== undefined) next.runningJobIds = patch.runningJobIds;
     if (patch.jobsTotal !== undefined) next.jobsTotal = patch.jobsTotal;

@@ -5,7 +5,6 @@ import {
 import { useStudioStore } from "../../state/studioStore";
 import { OpenFile } from "../../../wailsjs/go/backend/Service";
 import { SizeValue, QualityValue, Mode, OutputFormatValue, OUTPUT_FORMAT_OPTIONS } from "../../types/domain";
-import { SettingsPanel } from "./SettingsPanel";
 import { isWindows, submitShortcutLabel, usesAppleUI } from "../../lib/platform";
 
 const PromptPopover = lazy(() => import("./PromptPopover").then((m) => ({ default: m.PromptPopover })));
@@ -38,7 +37,7 @@ const QUALITY_TIERS: { value: QualityValue; label: string }[] = [
 export function ControlPanel() {
   const {
     apiKey, mode, prompt, negativePrompt, size, quality, seed, styleTag,
-    outputFormat,
+    outputFormat, batchCount,
     sources, currentImage,
     errorMessage, errorRawPath, isRunning, lastPayload, isTestingKey, isOptimizingPrompt,
     apiMode, baseURL, responsesConfig,
@@ -279,6 +278,32 @@ export function ControlPanel() {
         </Seg>
       </Section>
 
+      <Section
+        label="出图张数"
+        trailing={<span className="font-mono-token text-[10px] text-zinc-400">{batchCount}x</span>}
+      >
+        <div className="grid grid-cols-3 gap-1.5">
+          {[1, 2, 4, 6, 8, 9].map((count) => (
+            <button
+              key={count}
+              type="button"
+              onClick={() => setField("batchCount", count)}
+              title={`同一提示词发起 ${count} 次请求`}
+              className={`flex h-9 items-center justify-center border text-xs font-medium transition-colors ${
+                batchCount === count
+                  ? "border-[color:var(--accent)]/35 bg-[var(--accent-soft)] text-[var(--accent)]"
+                  : "border-black/[0.08] text-zinc-600 hover:border-[color:var(--accent)]/30 hover:text-zinc-900 dark:border-white/[0.08] dark:text-zinc-400 dark:hover:text-zinc-200"
+              } ${isWindows ? "rounded-[8px]" : "rounded-[12px]"}`}
+            >
+              {count}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[10px] leading-relaxed text-zinc-500">
+          多张会并行请求,完成后在画板按网格挑图;受上游并发限制约束。
+        </p>
+      </Section>
+
       {/* 源图(只在 edit 模式)*/}
       {mode === "edit" && (
         <Section
@@ -405,8 +430,6 @@ export function ControlPanel() {
           </p>
         )}
       </div>
-
-      <SettingsPanel />
     </div>
   );
 }

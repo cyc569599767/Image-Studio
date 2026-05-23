@@ -67,6 +67,7 @@ import { isWindows } from "../lib/platform";
 import {
   activeRuntimePatch,
   apiModeLabel,
+  normalizeBatchCount,
   normalizeConcurrencyLimit,
   patchWorkspaceRuntime,
   workspaceRuntimeFromState,
@@ -236,6 +237,8 @@ interface StudioState {
   // ---- Result + history ----
   currentImage: HistoryItem | null;
   history: HistoryItem[];
+  batchResults: HistoryItem[];
+  resultGridOpen: boolean;
 
   // ---- Canvas tooling state (UI only) ----
   tool: "pan" | "mask" | "annotate";
@@ -324,6 +327,9 @@ interface StudioState {
   redo: () => void;
   setCompareB: (item: HistoryItem | null) => void;
   setCompareSplit: (v: number) => void;
+  openResultGrid: () => void;
+  closeResultGrid: () => void;
+  selectBatchResult: (item: HistoryItem) => Promise<void>;
   importImageFile: (file: File) => Promise<void>;
   pushToast: (text: string, kind?: Toast["kind"], ttl?: number, action?: Toast["action"]) => void;
   dismissToast: (id: string) => void;
@@ -435,6 +441,16 @@ function persistTrimmedHistory(items: HistoryItem[]): void {
   void pruneHistoryStorage(keptIDs);
 }
 
+function historyItemsByIds(history: HistoryItem[], ids: string[]): HistoryItem[] {
+  if (ids.length === 0) return [];
+  const byID = new Map(history.map((item) => [item.id, item]));
+  return ids.map((id) => byID.get(id)).filter((item): item is HistoryItem => !!item);
+}
+
+async function ensureFullBatchItem(item: HistoryItem): Promise<HistoryItem> {
+  return (await ensureFullHistoryItem(item)) ?? item;
+}
+
 async function createPreviewB64(b64: string, maxEdge = 192): Promise<string> {
   const blob = base64ToBlob(b64);
   const preview = await createPreviewBlob(blob, maxEdge);
@@ -513,6 +529,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   currentImage: null,
   history: [],
+  batchResults: [],
+  resultGridOpen: false,
 
   tool: "pan",
   brushSize: 30,
@@ -576,8 +594,26 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       return;
     }
     // 其他全局偏好字段
-    set({ [key]: value } as any);
-    if (key === "errorMessage") {
+    const normalizedValue = key === "batchCount" ? normalizeBatchCount(value) : value;
+    set({ [key]: normalizedValue } as any);
+    if (key === "currentImage") {
+      const item = normalizedValue as HistoryItem | null;
+      set({
+        compareB: null,
+        resultGridOpen: false,
+        workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, {
+          currentImageId: item?.id ?? null,
+          resultGridOpen: false,
+        }),
+      });
+    } else if (key === "batchCount") {
+      const value = normalizedValue as number;
+      set({
+        workspaces: get().workspaces.map((w) => (
+          w.id === get().activeWorkspaceId ? { ...w, batchCount: value } : w
+        )),
+      });
+    } else if (key === "errorMessage") {
       set({ workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, { errorMessage: value as string | null }) });
     } else if (key === "errorRawPath") {
       set({ workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, { errorRawPath: value as string | null }) });
@@ -698,13 +734,18 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       set({ errorMessage: baseURLError, errorRawPath: null });
       return;
     }
+    const batchCount = normalizeBatchCount(s.batchCount);
     const activeConfig = s.apiMode === "responses" ? s.responsesConfig : s.imagesConfig;
     const concurrencyLimit = normalizeConcurrencyLimit(activeConfig.concurrencyLimit);
     if (concurrencyLimit > 0) {
       const activeCount = workspaceRunningCount(s, s.apiMode);
-      if (activeCount >= concurrencyLimit) {
+      const available = concurrencyLimit - activeCount;
+      if (available < batchCount) {
         const apiLabel = s.apiMode === "responses" ? "Responses API" : "Images API";
-        set({ errorMessage: `${apiLabel} 已达到并发限制 ${concurrencyLimit},请等待当前任务完成后再提交。`, errorRawPath: null });
+        set({
+          errorMessage: `${apiLabel} 并发限制 ${concurrencyLimit},当前还可提交 ${Math.max(0, available)} 个,本次需要 ${batchCount} 个。`,
+          errorRawPath: null,
+        });
         return;
       }
     }
@@ -730,13 +771,20 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       progress: null,
       lastLogLine: "",
       isRunning: true,
-      jobsTotal: 1,
+      jobsTotal: batchCount,
       jobsCompleted: 0,
       runningJobs: [],
     };
     set({
       ...runPatch,
-      workspaces: patchWorkspaceRuntime(s.workspaces, workspaceId, runPatch),
+      batchCount,
+      batchResults: [],
+      resultGridOpen: batchCount > 1,
+      workspaces: patchWorkspaceRuntime(s.workspaces, workspaceId, {
+        ...runPatch,
+        batchResultIds: [],
+        resultGridOpen: batchCount > 1,
+      }),
     });
 
     const maskDataURL = s.mode === "edit"
@@ -781,21 +829,21 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       workspaces: patchWorkspaceRuntime(get().workspaces, workspaceId, { lastPayload: basePayload }),
     });
 
-    // 单张生成。批量生图(batchCount>1)已下架 —— 上游中转站对并发不友好,
-    // 多个 SSE 流并行常会被节流/截断。如果将来恢复,for 循环回来即可。
-    const jobSeed = s.seed || 0;
-    const p: backend.GenerateOptions = { ...basePayload, seed: jobSeed };
-    void launchOneJob(s.mode, p, {
-      workspaceId,
-      apiMode: s.apiMode,
-      size: s.size,
-      quality: s.quality,
-      outputFormat: s.outputFormat,
-      sources: s.sources,
-      currentImage: s.currentImage,
-      styleTag: s.styleTag,
-      transport: s.transport,
-    });
+    for (let i = 0; i < batchCount; i++) {
+      const jobSeed = s.seed ? s.seed + i : 0;
+      const p: backend.GenerateOptions = { ...basePayload, seed: jobSeed };
+      void launchOneJob(s.mode, p, {
+        workspaceId,
+        apiMode: s.apiMode,
+        size: s.size,
+        quality: s.quality,
+        outputFormat: s.outputFormat,
+        sources: s.sources,
+        currentImage: s.currentImage,
+        styleTag: s.styleTag,
+        transport: s.transport,
+      });
+    }
   },
 
   cancel: async () => {
@@ -860,6 +908,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     set({
       mode: "edit",
       currentImage: localItem,
+      resultGridOpen: false,
       sources: alreadyIn
         ? existing
         : [...existing, { path: localItem.savedPath, name: baseName, size: 0 }],
@@ -868,8 +917,21 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   deleteHistoryItem: async (id) => {
     await removeHistoryItem(id);
-    set({ history: get().history.filter((h) => h.id !== id) });
-    if (get().currentImage?.id === id) set({ currentImage: null });
+    const currentBefore = get().currentImage;
+    const wasCurrent = currentBefore?.id === id;
+    const nextBatch = get().batchResults.filter((h) => h.id !== id);
+    const patch: Partial<StudioState> = { batchResults: nextBatch };
+    if (wasCurrent) patch.currentImage = null;
+    if (nextBatch.length <= 1) patch.resultGridOpen = false;
+    set({
+      history: get().history.filter((h) => h.id !== id),
+      ...(patch as any),
+      workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, {
+        currentImageId: wasCurrent ? null : currentBefore?.id ?? null,
+        batchResultIds: nextBatch.map((h) => h.id),
+        resultGridOpen: nextBatch.length > 1 && (patch.resultGridOpen ?? get().resultGridOpen),
+      }),
+    });
   },
 
   saveCurrentImageAs: async () => {
@@ -1008,6 +1070,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       batchCount: 1,
       sources: [],
       currentImageId: null,
+      batchResultIds: [],
+      resultGridOpen: false,
       runningJobIds: [],
       jobsTotal: 0,
       jobsCompleted: 0,
@@ -1146,6 +1210,37 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     });
   },
   setCompareSplit: (v) => set({ compareSplit: Math.max(0, Math.min(1, v)) }),
+
+  openResultGrid: () => {
+    const ids = get().batchResults.map((item) => item.id);
+    if (ids.length <= 1) return;
+    set({
+      resultGridOpen: true,
+      compareB: null,
+      workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, { resultGridOpen: true }),
+    });
+  },
+  closeResultGrid: () => {
+    set({
+      resultGridOpen: false,
+      workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, { resultGridOpen: false }),
+    });
+  },
+  selectBatchResult: async (item) => {
+    const full = await ensureFullBatchItem(item);
+    set({
+      currentImage: full,
+      resultGridOpen: false,
+      compareB: null,
+      maskDataURL: null,
+      annotations: [],
+      tool: "pan",
+      workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, {
+        currentImageId: full.id,
+        resultGridOpen: false,
+      }),
+    });
+  },
 
   pushToast: (text, kind = "info", ttl = 3500, action) => {
     const id = genId();
@@ -1435,6 +1530,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       batchCount: 1,
       sources: [],
       currentImageId: null,
+      batchResultIds: [],
+      resultGridOpen: false,
       runningJobIds: [],
       jobsTotal: 0,
       jobsCompleted: 0,
@@ -1458,6 +1555,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       batchCount: newW.batchCount,
       sources: newW.sources,
       currentImage: null,
+      batchResults: [],
+      resultGridOpen: false,
       annotations: [],
       strokes: [],
       maskDataURL: null,
@@ -1482,6 +1581,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const newCurrent = target.currentImageId
       ? s.history.find((h) => h.id === target.currentImageId) ?? null
       : null;
+    const batchResults = historyItemsByIds(s.history, target.batchResultIds ?? []);
     const runningJobs = target.runningJobIds ?? [];
     set({
       workspaces: persisted,
@@ -1496,6 +1596,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       batchCount: target.batchCount,
       sources: target.sources,
       currentImage: newCurrent,
+      batchResults,
+      resultGridOpen: !!target.resultGridOpen,
       annotations: [],
       strokes: [],
       maskDataURL: null,
@@ -1531,6 +1633,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const newCurrent = next.currentImageId
         ? s.history.find((h) => h.id === next.currentImageId) ?? null
         : null;
+      const batchResults = historyItemsByIds(s.history, next.batchResultIds ?? []);
       const runningJobs = next.runningJobIds ?? [];
       set({
         workspaces: remaining,
@@ -1546,6 +1649,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         batchCount: next.batchCount,
         sources: next.sources,
         currentImage: newCurrent,
+        batchResults,
+        resultGridOpen: !!next.resultGridOpen,
         annotations: [],
         strokes: [],
         maskDataURL: null,
@@ -1649,6 +1754,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       set({
         currentImage: fullItem,
         history: trimmed,
+        batchResults: [],
+        resultGridOpen: false,
         mode: "edit",
         sources: alreadyIn
           ? existingSources
@@ -1880,19 +1987,41 @@ async function launchOneJob(
         persistHistoryItem(item).catch(() => undefined);
         persistHistoryFullImage(item.id, r.imageB64).catch(() => undefined);
         const trimmed = trimHistory([item, ...store.getState().history]);
-        store.setState((state) => ({
-          history: trimmed,
-          recentDurations: rd,
-          workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, { currentImageId: item.id }),
-          ...(state.activeWorkspaceId === snapshot.workspaceId
-            ? {
-                currentImage: fullItem,
-                maskDataURL: null,
-                annotations: [],
-                tool: "pan",
-              }
-            : {}),
-        } as Partial<StudioState>));
+        store.setState((state) => {
+          const workspace = state.workspaces.find((w) => w.id === snapshot.workspaceId);
+          const existingBatchIDs = state.activeWorkspaceId === snapshot.workspaceId
+            ? state.batchResults.map((b) => b.id)
+            : workspace?.batchResultIds ?? [];
+          const gridWasOpen = state.activeWorkspaceId === snapshot.workspaceId
+            ? state.resultGridOpen
+            : workspace?.resultGridOpen ?? false;
+          const nextBatchIDs = existingBatchIDs.includes(item.id)
+            ? existingBatchIDs
+            : [...existingBatchIDs, item.id];
+          const nextGridOpen = gridWasOpen;
+          const batchResults = state.activeWorkspaceId === snapshot.workspaceId
+            ? [...state.batchResults, fullItem]
+            : state.batchResults;
+          return {
+            history: trimmed,
+            recentDurations: rd,
+            workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, {
+              currentImageId: item.id,
+              batchResultIds: nextBatchIDs,
+              resultGridOpen: nextGridOpen,
+            }),
+            ...(state.activeWorkspaceId === snapshot.workspaceId
+              ? {
+                  currentImage: fullItem,
+                  batchResults,
+                  resultGridOpen: nextGridOpen,
+                  maskDataURL: null,
+                  annotations: [],
+                  tool: "pan",
+                }
+              : {}),
+          } as Partial<StudioState>;
+        });
         persistTrimmedHistory(trimmed);
         // 桌面通知 —— 点击拉前台 + 直达详情抽屉
         if (willNotify) {
@@ -1941,15 +2070,20 @@ async function launchOneJob(
     const patch: WorkspacePatch = {
       errorMessage: `提交失败:${e?.message ?? e}`,
       errorRawPath: null,
-      runningJobs: [],
-      progress: null,
-      jobsTotal: 0,
-      jobsCompleted: 0,
     };
-    store.setState((state) => ({
-      workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, patch),
-      ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(patch) : {}),
-    } as Partial<StudioState>));
+    store.setState((state) => {
+      const runtime = workspaceRuntimeFromState(state, snapshot.workspaceId);
+      const nextPatch: WorkspacePatch = {
+        ...patch,
+        runningJobs: runtime.runningJobs,
+        jobsCompleted: Math.min(runtime.jobsTotal, runtime.jobsCompleted + 1),
+        progress: runtime.runningJobs.length === 0 ? null : runtime.progress,
+      };
+      return {
+        workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, nextPatch),
+        ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(nextPatch) : {}),
+      } as Partial<StudioState>;
+    });
   }
 }
 
@@ -1980,6 +2114,8 @@ function saveActiveWorkspaceSnapshot(s: StudioState): Workspace[] {
       batchCount: s.batchCount,
       sources: s.sources,
       currentImageId: s.currentImage?.id ?? null,
+      batchResultIds: s.batchResults.map((item) => item.id),
+      resultGridOpen: s.resultGridOpen,
       runningJobIds: s.runningJobs,
       jobsTotal: s.jobsTotal,
       jobsCompleted: s.jobsCompleted,

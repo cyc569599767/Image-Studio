@@ -17,6 +17,8 @@ function makeWorkspace(id, overrides = {}) {
     batchCount: 1,
     sources: [],
     currentImageId: null,
+    batchResultIds: [],
+    resultGridOpen: false,
     runningJobIds: [],
     jobsTotal: 0,
     jobsCompleted: 0,
@@ -36,14 +38,24 @@ test("normalizes api mode and concurrency values", () => {
   assert.equal(runtime.normalizeConcurrencyLimit(3.8), 3);
   assert.equal(runtime.normalizeConcurrencyLimit(0), 0);
   assert.equal(runtime.normalizeConcurrencyLimit(-2), 0);
+  assert.equal(runtime.normalizeBatchCount(3.8), 3);
+  assert.equal(runtime.normalizeBatchCount(0), 1);
+  assert.equal(runtime.normalizeBatchCount(99), 9);
 });
 
 test("patches only the target workspace runtime", () => {
   const workspaces = [makeWorkspace("a"), makeWorkspace("b")];
-  const next = runtime.patchWorkspaceRuntime(workspaces, "b", { runningJobs: ["job-1"], jobsCompleted: 1 });
+  const next = runtime.patchWorkspaceRuntime(workspaces, "b", {
+    runningJobs: ["job-1"],
+    jobsCompleted: 1,
+    batchResultIds: ["img-1", "img-2"],
+    resultGridOpen: true,
+  });
   assert.deepEqual(next[0], workspaces[0]);
   assert.deepEqual(next[1].runningJobIds, ["job-1"]);
   assert.equal(next[1].jobsCompleted, 1);
+  assert.deepEqual(next[1].batchResultIds, ["img-1", "img-2"]);
+  assert.equal(next[1].resultGridOpen, true);
 });
 
 test("reads runtime from the active workspace mirror and background tabs", () => {

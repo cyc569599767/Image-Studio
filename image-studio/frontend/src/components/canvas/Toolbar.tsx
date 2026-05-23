@@ -13,6 +13,7 @@ export function Toolbar() {
     annotationKind, annotationColor,
     annotations, selectedAnnotationId,
     fullscreen,
+    batchResults, resultGridOpen, openResultGrid, closeResultGrid,
     setField, saveCurrentImageAs,
     resetMask, clearAnnotations,
     undoStack, redoStack, undo, redo,
@@ -145,6 +146,19 @@ export function Toolbar() {
       )}
 
       <div className="ml-auto flex items-center gap-1">
+        {batchResults.length > 1 && (
+          <button
+            onClick={resultGridOpen ? closeResultGrid : openResultGrid}
+            title={resultGridOpen ? "返回当前图" : "查看本批多图网格"}
+            className={`px-2.5 py-1 text-[11px] transition-colors ${
+              resultGridOpen
+                ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                : "text-zinc-600 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] dark:text-zinc-400"
+            } ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
+          >
+            {resultGridOpen ? "单图" : `网格 ${batchResults.length}`}
+          </button>
+        )}
         {currentImage && (
           <span className="text-[11px] text-zinc-500 font-mono-token">{currentImage.size}</span>
         )}

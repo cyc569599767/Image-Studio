@@ -1,4 +1,4 @@
-import { Github, Monitor, Moon, Plus, Sun } from "lucide-react";
+import { Github, Monitor, Moon, Plus, Settings, Sun } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import { OpenExternalURL } from "../../../wailsjs/go/backend/Service";
 import { HitokotoStrip } from "./HitokotoStrip";
@@ -6,7 +6,7 @@ import { isWindows, usesAppleUI } from "../../lib/platform";
 
 const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
 
-export function AppHeader() {
+export function AppHeader({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { fullscreen, theme, setTheme, pushToast, workspaces, newWorkspace } = useStudioStore();
   if (fullscreen) return null;
 
@@ -82,6 +82,12 @@ export function AppHeader() {
           title="GitHub"
         >
           <Github className="h-4 w-4" />
+        </HeaderIconBtn>
+        <HeaderIconBtn
+          onClick={onOpenSettings}
+          title="设置"
+        >
+          <Settings className="h-4 w-4" />
         </HeaderIconBtn>
       </div>
     </header>

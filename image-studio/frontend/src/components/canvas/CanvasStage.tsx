@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Stage, Layer, Image as KonvaImage, Line, Rect, Arrow, Text, Group } from "react-konva";
 import Konva from "konva";
 import { useStudioStore } from "../../state/studioStore";
-import { Annotation } from "../../types/domain";
+import { Annotation, HistoryItem } from "../../types/domain";
 import { isMac } from "../../lib/platform";
 import { blobToObjectURL, useBlobURL } from "../../lib/images";
 
@@ -65,8 +65,10 @@ export function CanvasStage() {
     undoStack, redoStack, undo, redo,
     compareB, compareSplit, setCompareSplit, setCompareB,
     isRunning, cancel, errorMessage, setField,
+    batchResults, resultGridOpen, selectBatchResult, closeResultGrid,
     canvasViewResetTick,
   } = useStudioStore();
+  const showingResultGrid = resultGridOpen && batchResults.length > 1;
 
   // Hold-space-for-pan: while space is held, override tool to "pan".
   const [spacePan, setSpacePan] = useState(false);
@@ -431,7 +433,15 @@ export function CanvasStage() {
       style={{ cursor: !currentImage ? "default" : (effectiveTool === "pan" ? (spacePan ? "grabbing" : "grab") : "crosshair") }}
     >
       {!currentImage && <EmptyState />}
-      {currentImage && compareB && (
+      {showingResultGrid && (
+        <BatchResultGrid
+          items={batchResults}
+          currentId={currentImage?.id ?? null}
+          onSelect={selectBatchResult}
+          onClose={closeResultGrid}
+        />
+      )}
+      {!showingResultGrid && currentImage && compareB && (
         <CompareOverlay
           aBlob={currentImage.imageBlob ?? null}
           aB64={currentImage.imageB64}
@@ -441,7 +451,7 @@ export function CanvasStage() {
           onSplit={setCompareSplit}
         />
       )}
-      {currentImage && !compareB && hostSize.w > 0 && hostSize.h > 0 && (
+      {!showingResultGrid && currentImage && !compareB && hostSize.w > 0 && hostSize.h > 0 && (
       // The Stage canvas is wrapped in an absolutely positioned container so
       // its (potentially very large) layout footprint cannot push back on the
       // stage-host's grid-derived width. stage-host stays bounded by the grid
@@ -550,6 +560,74 @@ export function CanvasStage() {
       </div>
       )}
     </div>
+  );
+}
+
+function BatchResultGrid({
+  items,
+  currentId,
+  onSelect,
+  onClose,
+}: {
+  items: HistoryItem[];
+  currentId: string | null;
+  onSelect: (item: HistoryItem) => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const columns = items.length <= 2 ? 2 : items.length <= 4 ? 2 : 3;
+  return (
+    <div className="batch-grid-overlay">
+      <div className="batch-grid-head">
+        <span className="batch-grid-title">本批结果 · {items.length} 张</span>
+        <button type="button" className="batch-grid-close" onClick={onClose} title="返回当前图">
+          返回当前图
+        </button>
+      </div>
+      <div
+        className="batch-grid"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
+        {items.map((item, index) => (
+          <BatchGridTile
+            key={item.id}
+            item={item}
+            index={index}
+            active={item.id === currentId}
+            onSelect={onSelect}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BatchGridTile({
+  item,
+  index,
+  active,
+  onSelect,
+}: {
+  item: HistoryItem;
+  index: number;
+  active: boolean;
+  onSelect: (item: HistoryItem) => void | Promise<void>;
+}) {
+  const previewURL = useBlobURL(item.previewBlob ?? item.imageBlob ?? null, item.previewOnly ? item.imageB64 : null);
+  return (
+    <button
+      type="button"
+      className={`batch-grid-tile ${active ? "active" : ""}`}
+      onClick={() => void onSelect(item)}
+      title={item.prompt}
+    >
+      <img
+        src={previewURL ?? `data:image/png;base64,${item.imageB64}`}
+        alt={item.prompt || `batch result ${index + 1}`}
+        draggable={false}
+      />
+      <span className="batch-grid-index">{index + 1}</span>
+      {item.elapsedSec && <span className="batch-grid-meta">{item.elapsedSec}s</span>}
+    </button>
   );
 }
 

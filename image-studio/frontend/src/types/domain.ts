@@ -98,6 +98,10 @@ export interface Workspace {
   // We store currentImageId rather than the full HistoryItem so we don't
   // duplicate large base64 blobs. The history list is shared across tabs.
   currentImageId: string | null;
+  // IDs from the latest multi-request run for this workspace. These are history
+  // IDs so the tab state stays light while the canvas can reopen the batch grid.
+  batchResultIds: string[];
+  resultGridOpen: boolean;
   runningJobIds: string[];
   jobsTotal: number;
   jobsCompleted: number;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  ChevronDown, Download, Folder, FolderEdit, Github, Info, KeyRound,
-  MessageSquare, Monitor, Moon, RotateCw, Settings as SettingsIcon, Sun, Trash2, Upload, X,
+  Download, Folder, FolderEdit, Github, Info, KeyRound,
+  MessageSquare, Monitor, Moon, RotateCw, Sun, Trash2, Upload, X,
 } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import {
@@ -51,7 +51,7 @@ function PresetsRow() {
   );
 }
 
-export function SettingsPanel() {
+export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const {
     transport,
     theme, fontScale,
@@ -62,7 +62,6 @@ export function SettingsPanel() {
     pushToast,
   } = useStudioStore();
 
-  const [open, setOpen] = useState(false);
   const [outputDir, setOutputDir] = useState("");
   const [aboutOpen, setAboutOpen] = useState(false);
 
@@ -88,20 +87,15 @@ export function SettingsPanel() {
     }
   }
 
+  function closeSettings() {
+    setAboutOpen(false);
+    onClose();
+  }
+
   return (
-    <section>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        title="高级设置"
-        className={`platform-card flex w-full items-center justify-between border border-black/[0.05] bg-white/70 px-4 py-3 text-xs text-zinc-500 shadow-[var(--shadow-card)] transition-colors hover:text-zinc-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-zinc-200 ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}
-      >
-        <span className="inline-flex items-center gap-1.5 uppercase tracking-[0.12em]">
-          <SettingsIcon className="w-3 h-3" /> 设置
-        </span>
-        <ChevronDown className={`w-3 h-3 opacity-60 transition-transform ${open ? "rotate-0" : "-rotate-90"}`} />
-      </button>
-      {open && (
-        <div className={`platform-card mt-3 flex flex-col gap-3.5 border border-black/[0.05] bg-white/70 p-4 shadow-[var(--shadow-card)] dark:border-white/[0.06] dark:bg-white/[0.03] ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}>
+    <>
+      <Modal open={open} onClose={closeSettings} title="设置" width={540}>
+        <div className="flex flex-col gap-3.5">
           {/* 网络通道 */}
           <Row label="网络通道">
             <select
@@ -248,7 +242,7 @@ export function SettingsPanel() {
             {`快捷键:1/2/3 切工具 · 空格临时拖动 · F 重置视图 · [ ] 调笔刷 · ${undoShortcutLabel} 撤销 · Esc 取消/退出对比 · Shift+点击历史 进入对比`}
           </p>
         </div>
-      )}
+      </Modal>
 
       {/* 关于 modal */}
       <Modal open={aboutOpen} onClose={() => setAboutOpen(false)} title="关于 Image Studio" width={460}>
@@ -301,7 +295,7 @@ export function SettingsPanel() {
           Copyright © 2026 · Released under MIT
         </div>
       </Modal>
-    </section>
+    </>
   );
 }
 

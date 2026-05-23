@@ -177,6 +177,90 @@
 }
 .empty-stage-link:hover { border-color: var(--accent); }
 
+.batch-grid-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--canvas-bg);
+  z-index: 4;
+}
+.batch-grid-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.batch-grid-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.batch-grid-close {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11px;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.batch-grid-close:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+}
+.batch-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+}
+.batch-grid-tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.10);
+  transition: border-color 120ms, box-shadow 120ms, transform 120ms;
+}
+.batch-grid-tile:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  transform: translateY(-1px);
+}
+.batch-grid-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 12px 34px rgb(0 0 0 / 0.16);
+}
+.batch-grid-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: var(--canvas-bg);
+}
+.batch-grid-index,
+.batch-grid-meta {
+  position: absolute;
+  top: 8px;
+  background: rgb(0 0 0 / 0.62);
+  color: #fff;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  backdrop-filter: blur(8px);
+}
+.batch-grid-index { left: 8px; }
+.batch-grid-meta { right: 8px; font-family: var(--mono-font); }
+
 /* Status bar pinned to bottom of canvas-shell. */
 .statusbar {
   display: flex; align-items: center; gap: 14px;
