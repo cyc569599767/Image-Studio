@@ -1,5 +1,6 @@
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
+import { isWindows } from "../../lib/platform";
 
 function fmtBytes(b: number): string {
   if (b < 1024) return `${b} B`;
@@ -19,7 +20,7 @@ export function StatusBar() {
 
   if (isRunning) {
     return (
-      <div className="relative flex items-center gap-3 overflow-hidden border-t border-black/[0.06] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-700 backdrop-blur-2xl dark:border-white/[0.06] dark:text-zinc-300">
+      <div className={`relative flex items-center gap-3 overflow-hidden border-t border-[var(--border)] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-700 backdrop-blur-2xl dark:text-zinc-300 ${isWindows ? "min-h-[34px]" : ""}`}>
         <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--accent)]" />
         <span className="font-medium">
           {progress ? `${progress.stage} · ${progress.elapsed}s · ${fmtBytes(progress.bytes)}` : "正在请求..."}
@@ -47,7 +48,7 @@ export function StatusBar() {
     if (currentImage.seed) metaParts.push(`seed ${currentImage.seed}`);
     if (currentImage.styleTag) metaParts.push(`#${currentImage.styleTag}`);
     return (
-      <div className="flex items-center gap-3 overflow-hidden border-t border-black/[0.06] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-600 backdrop-blur-2xl dark:border-white/[0.06] dark:text-zinc-400">
+      <div className={`flex items-center gap-3 overflow-hidden border-t border-[var(--border)] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-600 backdrop-blur-2xl dark:text-zinc-400 ${isWindows ? "min-h-[34px]" : ""}`}>
         <span className="inline-flex shrink-0 items-center gap-1.5 text-[var(--accent)]">
           <CheckCircle2 className="w-3 h-3" /> <span className="font-medium">{metaParts.join(" · ")}</span>
         </span>
@@ -62,7 +63,7 @@ export function StatusBar() {
     );
   }
   return (
-    <div className="border-t border-black/[0.06] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-500 backdrop-blur-2xl dark:border-white/[0.06]">
+    <div className={`border-t border-[var(--border)] bg-[var(--toolbar)] px-3 py-2 text-[11px] text-zinc-500 backdrop-blur-2xl ${isWindows ? "min-h-[34px]" : ""}`}>
       准备就绪
     </div>
   );

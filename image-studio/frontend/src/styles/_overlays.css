@@ -353,7 +353,7 @@
 /* FAQ modal content. */
 .faq details {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 0 12px;
   margin-bottom: 8px;
   background: var(--surface);
@@ -396,8 +396,8 @@
   background: var(--bg);
   border: 1px solid var(--border);
   padding: 1px 5px;
-  border-radius: 3px;
-  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  border-radius: 4px;
+  font-family: var(--mono-font);
   font-size: 11px;
   color: var(--accent);
 }
@@ -405,8 +405,8 @@
   background: var(--surface-2);
   border: 1px solid var(--border-2);
   padding: 1px 6px;
-  border-radius: 3px;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  border-radius: 4px;
+  font-family: var(--mono-font);
   font-size: 10px;
   color: var(--text);
   box-shadow: 0 1px 0 var(--border-2);

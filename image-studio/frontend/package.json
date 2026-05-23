@@ -4,14 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:windows": "vite --mode windows",
-    "dev:macos": "vite --mode macos",
-    "dev:linux": "vite --mode linux",
-    "build": "tsc --noEmit && vite build",
-    "build:windows": "tsc --noEmit && vite build --mode windows",
-    "build:macos": "tsc --noEmit && vite build --mode macos",
-    "build:linux": "tsc --noEmit && vite build --mode linux",
+    "dev": "node ./scripts/platform-vite.mjs dev",
+    "dev:windows": "node ./scripts/platform-vite.mjs dev windows",
+    "dev:macos": "node ./scripts/platform-vite.mjs dev macos",
+    "dev:linux": "node ./scripts/platform-vite.mjs dev linux",
+    "build": "node ./scripts/platform-vite.mjs build",
+    "build:windows": "node ./scripts/platform-vite.mjs build windows",
+    "build:macos": "node ./scripts/platform-vite.mjs build macos",
+    "build:linux": "node ./scripts/platform-vite.mjs build linux",
     "preview": "vite preview"
   },
   "dependencies": {

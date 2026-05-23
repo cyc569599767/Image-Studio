@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import { EventsOn, EventsOff } from "../../wailsjs/runtime/runtime";
+import {
+  EventsOn,
+  EventsOff,
+  WindowSetDarkTheme,
+  WindowSetLightTheme,
+  WindowSetSystemDefaultTheme,
+} from "../../wailsjs/runtime/runtime";
 import {
   Generate as wailsGenerate,
   Edit as wailsEdit,
@@ -56,6 +62,7 @@ import {
   validateBaseURL,
 } from "../lib/security";
 import { base64ToBlob, blobToBase64, createPreviewBlob, getImageDimensionsFromBase64 } from "../lib/images";
+import { isWindows } from "../lib/platform";
 
 // 单个 API 形态的上游 5 字段(去掉 apiMode 本身)。
 // 其中 apiKey 只进后端凭据存储;其余字段走 localStorage。
@@ -110,6 +117,11 @@ function applyTheme(theme: ThemeMode) {
   unbindSystemThemeListener();
   document.documentElement.setAttribute("data-appearance", theme);
   writeResolvedTheme(resolvedTheme(theme));
+  if (isWindows) {
+    if (theme === "system") WindowSetSystemDefaultTheme();
+    else if (theme === "dark") WindowSetDarkTheme();
+    else WindowSetLightTheme();
+  }
   if (theme === "system") bindSystemThemeListener();
 }
 

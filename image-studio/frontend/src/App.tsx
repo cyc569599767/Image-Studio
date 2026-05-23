@@ -10,7 +10,7 @@ import { StatusBar } from "./components/canvas/StatusBar";
 import { HistoryRail } from "./components/history/HistoryRail";
 import { ToastContainer } from "./components/common/ToastContainer";
 import { useStudioStore } from "./state/studioStore";
-import { isMac } from "./lib/platform";
+import { isMac, isWindows } from "./lib/platform";
 
 const UpstreamConfigModal = lazy(() => import("./components/panel/UpstreamConfigModal").then((m) => ({ default: m.UpstreamConfigModal })));
 const ResultDetailDrawer = lazy(() => import("./components/panel/ResultDetailDrawer").then((m) => ({ default: m.ResultDetailDrawer })));
@@ -118,8 +118,18 @@ function App() {
     <div className="app-root relative">
       {/* Ambient background blobs — 模糊圆球点缀,主界面之下永远不挡 */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10">
-        <div className="absolute left-[18%] top-[-8%] h-[460px] w-[460px] rounded-full bg-sky-500/[0.05] blur-3xl" />
-        <div className="absolute right-[-8%] top-[55%] h-[400px] w-[400px] rounded-full bg-cyan-400/[0.035] blur-3xl" />
+        {isWindows ? (
+          <>
+            <div className="absolute inset-x-0 top-0 h-[220px] bg-linear-to-b from-white/18 to-transparent dark:from-white/5" />
+            <div className="absolute left-[12%] top-[10%] h-[320px] w-[320px] rounded-[28px] bg-sky-500/[0.035] blur-3xl" />
+            <div className="absolute right-[6%] top-[18%] h-[260px] w-[420px] rounded-[36px] bg-cyan-400/[0.03] blur-3xl" />
+          </>
+        ) : (
+          <>
+            <div className="absolute left-[18%] top-[-8%] h-[460px] w-[460px] rounded-full bg-sky-500/[0.05] blur-3xl" />
+            <div className="absolute right-[-8%] top-[55%] h-[400px] w-[400px] rounded-full bg-cyan-400/[0.035] blur-3xl" />
+          </>
+        )}
       </div>
 
       <AppHeader />

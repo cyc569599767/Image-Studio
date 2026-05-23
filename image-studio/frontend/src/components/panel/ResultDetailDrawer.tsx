@@ -3,7 +3,7 @@ import { ClipboardCopy, Folder, RotateCw, Save, Sparkles, X } from "lucide-react
 import { useStudioStore } from "../../state/studioStore";
 import type { HistoryItem, SizeValue } from "../../types/domain";
 import { SaveImageAs, OpenOutputDir } from "../../../wailsjs/go/backend/Service";
-import { submitShortcutLabel } from "../../lib/platform";
+import { isWindows, submitShortcutLabel } from "../../lib/platform";
 import { useBlobURL } from "../../lib/images";
 
 const ASPECT_LABEL: Record<SizeValue, string> = {
@@ -77,7 +77,7 @@ export function ResultDetailDrawer() {
         <button
           onClick={close}
           title="关闭 (Esc)"
-          className="-mr-1 rounded-full p-1.5 text-zinc-500 hover:bg-black/[0.05] hover:text-zinc-900 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100"
+          className={`-mr-1 p-1.5 text-zinc-500 hover:bg-black/[0.05] hover:text-zinc-900 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
         >
           <X className="w-4 h-4" />
         </button>
@@ -85,12 +85,12 @@ export function ResultDetailDrawer() {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* 预览 */}
-        <div className="flex items-center justify-center rounded-[18px] border border-black/[0.08] bg-[var(--surface)] p-2 dark:border-white/[0.06]">
+        <div className={`flex items-center justify-center border border-black/[0.08] bg-[var(--surface)] p-2 dark:border-white/[0.06] ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}>
           <img
             src={previewURL ?? `data:image/png;base64,${item.imageB64}`}
             alt="生成结果"
             decoding="async"
-            className="max-h-[280px] max-w-full rounded-[14px] object-contain"
+            className={`max-h-[280px] max-w-full object-contain ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
           />
         </div>
 
@@ -141,7 +141,7 @@ export function ResultDetailDrawer() {
 
         <Section title="文件">
           {item.savedPath ? (
-            <p className="font-mono-token break-all rounded-[14px] border border-black/[0.06] bg-[var(--surface)] px-2.5 py-1.5 text-[11px] text-zinc-600 dark:border-white/[0.04] dark:text-zinc-400" title={item.savedPath}>
+            <p className={`font-mono-token break-all border border-black/[0.06] bg-[var(--surface)] px-2.5 py-1.5 text-[11px] text-zinc-600 dark:border-white/[0.04] dark:text-zinc-400 ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`} title={item.savedPath}>
               {item.savedPath}
             </p>
           ) : (
@@ -166,7 +166,7 @@ function Section({ title, hint, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[18px] border border-black/[0.05] bg-white/70 p-4 shadow-[var(--shadow-card)] dark:border-white/[0.06] dark:bg-white/[0.03]">
+    <section className={`border border-black/[0.05] bg-white/70 p-4 shadow-[var(--shadow-card)] dark:border-white/[0.06] dark:bg-white/[0.03] ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}>
       <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">{title}</h3>
       {hint && <p className="text-[10px] text-zinc-500 mb-2 leading-relaxed">{hint}</p>}
       {children}
@@ -191,13 +191,13 @@ function PromptBlock({ children, muted, highlight }: {
   highlight?: boolean;
 }) {
   return (
-    <p className={`mb-2 whitespace-pre-wrap break-words rounded-[14px] px-3 py-2 text-xs leading-relaxed ${
+    <p className={`mb-2 whitespace-pre-wrap break-words px-3 py-2 text-xs leading-relaxed ${
       highlight
         ? "border border-[color:var(--accent)]/20 bg-[var(--accent-soft)] text-[var(--accent)]"
         : muted
           ? "border border-black/[0.06] bg-[var(--surface)] text-zinc-500 dark:border-white/[0.04]"
           : "border border-black/[0.06] bg-[var(--surface)] text-zinc-700 dark:border-white/[0.04] dark:text-zinc-300"
-    }`}>
+    } ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}>
       {children}
     </p>
   );
@@ -212,11 +212,11 @@ function Btn({ children, onClick, primary }: {
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] transition-colors ${
+      className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] transition-colors ${
         primary
           ? "border border-[color:var(--accent)]/20 bg-[var(--accent-soft)] text-[var(--accent)] hover:opacity-90"
           : "border border-black/[0.08] text-zinc-700 hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.06] dark:text-zinc-300"
-      }`}
+      } ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
     >
       {children}
     </button>

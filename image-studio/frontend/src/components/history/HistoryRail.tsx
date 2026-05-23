@@ -298,7 +298,7 @@ function HistoryTile({
         e.preventDefault();
         onOpenMenu(e.clientX, e.clientY);
       }}
-      className={`group relative aspect-square cursor-pointer overflow-hidden rounded-[18px] border bg-white/70 shadow-[var(--shadow-card)] transition-all dark:bg-white/[0.03] ${
+      className={`group relative aspect-square cursor-pointer overflow-hidden border bg-white/70 shadow-[var(--shadow-card)] transition-all dark:bg-white/[0.03] ${isWindows ? "rounded-[12px]" : "rounded-[18px]"} ${
         isCurrent
           ? "border-[color:var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
           : isCompare
@@ -313,16 +313,16 @@ function HistoryTile({
         decoding="async"
         className="h-full w-full object-cover"
       />
-      <span className="absolute left-1.5 top-1.5 rounded-full bg-black/55 px-1.5 py-0.5 text-[9px] text-white backdrop-blur-sm">
+      <span className={`absolute left-1.5 top-1.5 bg-black/55 px-1.5 py-0.5 text-[9px] text-white backdrop-blur-sm ${isWindows ? "rounded-[6px]" : "rounded-full"}`}>
         {item.mode === "edit" ? "Edit" : "Generate"}
       </span>
       {isCompare && (
-        <span className="absolute right-1.5 top-1.5 rounded-full bg-blue-500 px-1.5 py-0.5 text-[9px] text-white">B</span>
+        <span className={`absolute right-1.5 top-1.5 bg-blue-500 px-1.5 py-0.5 text-[9px] text-white ${isWindows ? "rounded-[6px]" : "rounded-full"}`}>B</span>
       )}
       <button
         onClick={(e) => { e.stopPropagation(); void onDelete(item.id); }}
         title="删除"
-        className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white opacity-0 backdrop-blur-sm transition-all group-hover:opacity-100 hover:bg-red-500"
+        className={`absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center bg-black/55 text-white opacity-0 backdrop-blur-sm transition-all group-hover:opacity-100 hover:bg-red-500 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
       >
         <X className="w-3 h-3" />
       </button>

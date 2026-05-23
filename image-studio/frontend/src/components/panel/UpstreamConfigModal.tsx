@@ -3,6 +3,7 @@ import { Eye, EyeOff, Info, Plug } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { useStudioStore } from "../../state/studioStore";
 import { cleanBaseURL, validateBaseURL } from "../../lib/security";
+import { isWindows } from "../../lib/platform";
 
 export function UpstreamConfigModal({
   open,
@@ -93,7 +94,7 @@ export function UpstreamConfigModal({
                     active
                       ? "border-[color:var(--accent)]/25 bg-[var(--accent-soft)] text-[var(--accent)]"
                       : "border-black/[0.08] text-zinc-700 hover:border-[color:var(--accent)]/30 dark:border-white/[0.06] dark:text-zinc-300"
-                  }`}
+                  } ${isWindows ? "rounded-[10px]" : "rounded-[16px]"}`}
                 >
                   <span className="text-sm font-semibold">{o.title}</span>
                   <span className={`text-[10px] ${active ? "text-[var(--accent)]/80" : "text-zinc-500"}`}>{o.sub}</span>
@@ -112,7 +113,7 @@ export function UpstreamConfigModal({
           </Hint>
         </Field>
 
-        <div className="flex items-start gap-2 rounded-[16px] border border-[color:var(--accent)]/20 bg-[var(--accent-soft)] px-3 py-2 text-[11px] text-[var(--accent)]">
+        <div className={`flex items-start gap-2 border border-[color:var(--accent)]/20 bg-[var(--accent-soft)] px-3 py-2 text-[11px] text-[var(--accent)] ${isWindows ? "rounded-[10px]" : "rounded-[16px]"}`}>
           <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span>
             下方编辑的是 <strong>{draftApiMode === "responses" ? "Responses API" : "Images API"}</strong> 的配置 —— 两种形态各存一份,切换时另一份不动。
@@ -128,7 +129,7 @@ export function UpstreamConfigModal({
             onChange={(e) => setCur({ baseURL: e.target.value })}
             spellCheck={false}
             autoFocus={!draftBaseURL}
-            className="focus-ring w-full rounded-[14px] border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token"
+            className={`focus-ring w-full border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
           />
           {baseURLError && <Hint>{baseURLError}</Hint>}
         </Field>
@@ -143,13 +144,13 @@ export function UpstreamConfigModal({
               onChange={(e) => setCur({ apiKey: e.target.value })}
               spellCheck={false}
               autoComplete="off"
-              className="focus-ring w-full rounded-[14px] border border-black/[0.08] bg-[var(--surface)] py-2.5 pl-3 pr-10 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token"
+              className={`focus-ring w-full border border-black/[0.08] bg-[var(--surface)] py-2.5 pl-3 pr-10 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
             />
             <button
               type="button"
               onClick={() => setShowKey((v) => !v)}
               title={showKey ? "隐藏" : "显示"}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-zinc-500 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
+              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
             >
               {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             </button>
@@ -165,7 +166,7 @@ export function UpstreamConfigModal({
               placeholder="留空=默认 gpt-5.5"
               onChange={(e) => setCur({ textModelID: e.target.value })}
               spellCheck={false}
-              className="focus-ring w-full rounded-[14px] border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token"
+              className={`focus-ring w-full border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
             />
           </Field>
         )}
@@ -179,7 +180,7 @@ export function UpstreamConfigModal({
               : "留空=默认 gpt-image-2(直接传给 Images API)"}
             onChange={(e) => setCur({ imageModelID: e.target.value })}
             spellCheck={false}
-            className="focus-ring w-full rounded-[14px] border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token"
+            className={`focus-ring w-full border border-black/[0.08] bg-[var(--surface)] px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-white/[0.08] dark:text-zinc-100 dark:placeholder:text-zinc-500 font-mono-token ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
           />
         </Field>
 
@@ -187,7 +188,7 @@ export function UpstreamConfigModal({
           type="button"
           onClick={testWithCurrentDraft}
           disabled={!canSave || isTestingKey}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-full border border-black/[0.08] px-3 py-2.5 text-sm text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-zinc-300"
+          className={`w-full inline-flex items-center justify-center gap-2 border border-black/[0.08] px-3 py-2.5 text-sm text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-zinc-300 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
         >
           <Plug className={`w-3.5 h-3.5 ${isTestingKey ? "animate-spin" : ""}`} />
           {isTestingKey ? "测试中..." : "测试连接(会先保存草稿)"}
@@ -197,7 +198,7 @@ export function UpstreamConfigModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-black/[0.08] px-4 py-2 text-sm text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06]"
+            className={`border border-black/[0.08] px-4 py-2 text-sm text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             稍后再配
           </button>
@@ -205,7 +206,7 @@ export function UpstreamConfigModal({
             type="button"
             onClick={save}
             disabled={!canSave}
-            className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-2)] disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500 dark:disabled:bg-zinc-800"
+            className={`bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-2)] disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500 dark:disabled:bg-zinc-800 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             保存
           </button>

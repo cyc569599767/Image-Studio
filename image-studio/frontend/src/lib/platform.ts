@@ -77,7 +77,7 @@ export const fullscreenShortcutLabel = isMac ? "⌃⌘F" : "F11";
 export function platformOutputRootLabel() {
   if (isMac) return "~/Pictures/Image Studio";
   if (isWindows) return "%APPDATA%\\image-studio";
-  return "~/.config/image-studio";
+  return "~/Pictures/Image Studio";
 }
 
 export function platformRuntimeLabel() {

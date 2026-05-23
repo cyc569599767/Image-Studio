@@ -21,6 +21,8 @@
 > **v0.1.2** 重塑了整套 UI:Tailwind v4 + lucide-react 图标,字体 HarmonyOS Sans SC Medium + JetBrains Mono;每日一言条幅、动态画板棋盘格、白底黑线条新图标;输出目录拆分 `/images/` + `/log/`;Responses API 加「不优化提示词」开关让模型逐字使用你的 prompt。
 >
 > **v0.1.3** 新功能:比例与质量都加 **Auto** 档让上游决定;高级参数加 **输出图片格式**(PNG / JPEG / WebP);画笔/橡皮/自由画笔 **逐点跟手**(修了 react-konva 数组引用 bug);**旋转 / 翻转 / 裁剪改为就地编辑**,不再每点一次就刷一条历史。底栏数据改为 `今日已生图 / 总生图`。
+>
+> **v0.1.5** 起前端主题层按平台抽象:macOS 保留现有 Apple 风格;Windows 新增独立 Fluent 风格 token 与控件外观。主逻辑不改,通过平台检测或构建模式切换原生主题。
 
 ---
 
@@ -97,6 +99,36 @@ wails dev
 # 生产构建,输出到 build/bin/image-studio.exe (~29MB,内嵌字体 + Tailwind 资源)
 wails build
 ```
+
+前端主题也支持单独按平台预览/构建,方便你在不切系统的情况下检查原生主题:
+
+```bash
+cd image-studio/frontend
+
+# 默认:按当前运行平台自动识别
+npm run dev
+
+# 强制预览某个平台主题
+npm run dev:macos
+npm run dev:windows
+npm run dev:linux
+
+# 强制按某个平台主题打包前端静态资源
+npm run build:macos
+npm run build:windows
+npm run build:linux
+```
+
+这些命令只切换主题层(`VITE_TARGET_PLATFORM`),不会修改业务逻辑和数据流。
+默认的 `npm run dev` / `npm run build` 现在也会按宿主平台自动选择 `macos` / `windows` / `linux` 主题模式,所以 `wails dev` 和 `wails build` 不需要额外参数就会编译出对应客户端的原生主题。
+
+### 多端原生主题
+
+- **macOS**:保留现有 Apple 风格,使用 SF 系排版、较大圆角、玻璃态工具栏
+- **Windows**:单独的 Fluent 风格主题,使用 Segoe 系排版、较紧凑控件、较小圆角、Mica 风格分层表面
+- **Linux / 其他**:走通用主题分支,避免强行伪装成某个平台
+
+运行时前端会自动给根节点注入 `data-platform` / `data-ui-family`,CSS token 和组件壳层按这两个属性切换,因此平台主题可以继续扩展,而不需要动生成、画布、历史等主逻辑。
 
 macOS 直接 `wails build`(产物 `image-studio.app`,通用二进制 Apple Silicon + Intel)。Linux 需要先装 `libgtk-3-dev libwebkit2gtk-4.1-dev`(Ubuntu 24.04 / 桌面 Debian 同款)然后 `wails build -tags webkit2_41`;22.04 系是 `libwebkit2gtk-4.0-dev`,直接 `wails build` 不加 tag。
 

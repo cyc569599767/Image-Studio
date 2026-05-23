@@ -120,8 +120,8 @@ export function FAQModal({ open, onClose }: { open: boolean; onClose: () => void
             <li>API Key:系统安全存储(Keychain / Credential Manager / Secret Service)</li>
             <li>历史记录元数据:本地 IndexedDB 数据库</li>
             <li>生成的图片 PNG:<code>{platformOutputRootLabel()}/images/</code></li>
-            <li>导入的源图:<code>{platformOutputRootLabel()}/imports/</code></li>
-            <li>原始上游响应:跟 PNG 同目录(<code>sse-response-*.txt</code> 或 <code>images-response-*.json</code>,排错时用)</li>
+            <li>导入的源图:系统 config 目录下的 <code>image-studio/imports/</code>(内部 scratch,与输出目录解耦)</li>
+            <li>原始上游响应:输出根目录的 <code>log/</code> 下(<code>sse-response-*.txt</code> 或 <code>images-response-*.json</code>,排错时用)</li>
           </ul>
         </details>
 
