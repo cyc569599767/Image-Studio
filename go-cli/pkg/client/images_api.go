@@ -59,9 +59,13 @@ func RequestImagesAPI(
 		return ImageResult{}, ErrEmptyPrompt
 	}
 
-	baseURL := strings.TrimRight(opts.BaseURL, "/")
+	baseURL := strings.TrimSpace(opts.BaseURL)
 	if baseURL == "" {
 		return ImageResult{}, errors.New("未配置上游 BASE_URL,请在「设置 → 上游 BASE_URL」中填入兼容 OpenAI Images API 的中转站地址")
+	}
+	baseURL, err := ValidateBaseURL(baseURL)
+	if err != nil {
+		return ImageResult{}, err
 	}
 
 	model := opts.ImageModelID
@@ -162,31 +166,33 @@ func RequestImagesAPI(
 	}
 	defer resp.Body.Close()
 
-	var buf bytes.Buffer
-	tee := io.MultiWriter(rawSink, &buf)
-	if _, err := io.Copy(tee, resp.Body); err != nil {
-		return ImageResult{}, fmt.Errorf("read response body: %w", err)
-	}
-	raw := buf.Bytes()
+	preview := newCappedPreviewBuffer(4096)
+	teeReader := io.TeeReader(resp.Body, io.MultiWriter(rawSink, preview))
 
-	// Non-2xx with HTML body (Cloudflare 524 etc.) — parse will obviously fail;
-	// emit a friendly error so the retry layer can detect retryability.
+	var parsed imagesAPIResponse
+	dec := json.NewDecoder(teeReader)
+	if err := dec.Decode(&parsed); err != nil {
+		_, _ = io.Copy(io.MultiWriter(rawSink, preview), resp.Body)
+		bodyPreview := preview.String()
+		if len(bodyPreview) > 400 {
+			bodyPreview = bodyPreview[:400] + "..."
+		}
+		if resp.StatusCode/100 != 2 {
+			return ImageResult{}, fmt.Errorf("上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
+		}
+		return ImageResult{}, fmt.Errorf("解析 Images API 响应失败:%w", err)
+	}
+
+	// Non-2xx with JSON body — decode has already captured the structured error.
 	if resp.StatusCode/100 != 2 {
-		// Try JSON error first
-		var parsed imagesAPIResponse
-		if jerr := json.Unmarshal(raw, &parsed); jerr == nil && parsed.Error != nil {
+		if parsed.Error != nil {
 			return ImageResult{}, fmt.Errorf("上游返回 %d:%s", resp.StatusCode, parsed.Error.Message)
 		}
-		bodyPreview := string(raw)
+		bodyPreview := preview.String()
 		if len(bodyPreview) > 400 {
 			bodyPreview = bodyPreview[:400] + "..."
 		}
 		return ImageResult{}, fmt.Errorf("上游返回 HTTP %d: %s", resp.StatusCode, bodyPreview)
-	}
-
-	var parsed imagesAPIResponse
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return ImageResult{}, fmt.Errorf("解析 Images API 响应失败:%w", err)
 	}
 	if parsed.Error != nil {
 		return ImageResult{}, fmt.Errorf("上游返回错误:%s", parsed.Error.Message)
@@ -209,6 +215,30 @@ func RequestImagesAPI(
 		RevisedPrompt: d.RevisedPrompt,
 		SourceEvent:   "images_api",
 	}, nil
+}
+
+type cappedPreviewBuffer struct {
+	buf []byte
+	max int
+}
+
+func newCappedPreviewBuffer(max int) *cappedPreviewBuffer {
+	return &cappedPreviewBuffer{max: max}
+}
+
+func (b *cappedPreviewBuffer) Write(p []byte) (int, error) {
+	if len(b.buf) < b.max {
+		remain := b.max - len(b.buf)
+		if len(p) < remain {
+			remain = len(p)
+		}
+		b.buf = append(b.buf, p[:remain]...)
+	}
+	return len(p), nil
+}
+
+func (b *cappedPreviewBuffer) String() string {
+	return string(b.buf)
 }
 
 // imageSourcePathsForEdit picks the source-image paths for an Images API edit.

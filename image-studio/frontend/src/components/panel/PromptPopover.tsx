@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
+import { isWindows } from "../../lib/platform";
 
 const PROMPT_TEMPLATES: { label: string; text: string }[] = [
   { label: "写实摄影", text: "photorealistic, professional photography, 35mm, natural lighting, sharp focus, high detail" },
@@ -20,14 +21,14 @@ export function PromptPopover({ onClose, onPick }: { onClose: () => void; onPick
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-lg bg-white dark:bg-zinc-900 ring-1 ring-black/[0.08] dark:ring-white/[0.06] shadow-2xl overflow-hidden max-h-[300px] flex flex-col"
+      className={`absolute left-0 right-0 top-full z-50 mt-1.5 flex max-h-[300px] flex-col overflow-hidden border border-black/[0.08] bg-white/95 shadow-[0_24px_60px_rgb(15_23_42_/_0.16)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-zinc-900/95 ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}
     >
       <div className="flex items-center border-b border-black/[0.06] dark:border-white/[0.04]">
         <button
           onClick={() => setTab("templates")}
           className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
             tab === "templates"
-              ? "text-emerald-500 border-b-2 border-emerald-500"
+              ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
               : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
           }`}
         >
@@ -37,7 +38,7 @@ export function PromptPopover({ onClose, onPick }: { onClose: () => void; onPick
           onClick={() => setTab("history")}
           className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
             tab === "history"
-              ? "text-emerald-500 border-b-2 border-emerald-500"
+              ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
               : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
           }`}
         >
@@ -46,7 +47,7 @@ export function PromptPopover({ onClose, onPick }: { onClose: () => void; onPick
         <button
           onClick={onClose}
           title="关闭"
-          className="px-2 py-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+          className={`px-2 py-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 ${isWindows ? "rounded-[8px]" : ""}`}
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -56,7 +57,7 @@ export function PromptPopover({ onClose, onPick }: { onClose: () => void; onPick
           <button
             key={t.label}
             onClick={() => { onPick(t.text); onClose(); }}
-            className="w-full px-2.5 py-2 rounded-md text-left hover:bg-emerald-500/10 transition-colors"
+            className={`w-full px-2.5 py-2 text-left transition-colors hover:bg-[var(--accent-soft)] ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
           >
             <div className="text-xs font-medium text-zinc-900 dark:text-zinc-200 mb-0.5">{t.label}</div>
             <div className="text-[10px] text-zinc-500 leading-relaxed truncate">{t.text}</div>
@@ -71,7 +72,7 @@ export function PromptPopover({ onClose, onPick }: { onClose: () => void; onPick
                 key={i}
                 onClick={() => { onPick(p); onClose(); }}
                 title="点击使用"
-                className="w-full px-2.5 py-2 rounded-md text-left hover:bg-emerald-500/10 transition-colors"
+                className={`w-full px-2.5 py-2 text-left transition-colors hover:bg-[var(--accent-soft)] ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
               >
                 <div className="text-[11px] text-zinc-700 dark:text-zinc-300 leading-relaxed truncate">{p}</div>
               </button>

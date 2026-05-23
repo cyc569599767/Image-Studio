@@ -1,22 +1,47 @@
 name: Release
 
-# Build the Windows binary and attach it to a GitHub release.
-# Trigger by pushing a `v*` tag (e.g. `git tag v0.1.0 && git push --tags`),
-# or run manually via the "Run workflow" button on Actions tab.
+# Build desktop targets in parallel and produce an Android Pad frontend bundle
+# that reuses the macOS visual design tokens.
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
-  contents: write  # needed to upload artifacts to a release
+  contents: write
 
 jobs:
-  build-windows:
-    name: Build windows-amd64
-    runs-on: windows-latest
+  build-desktop:
+    name: Build ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-amd64
+            runner: windows-latest
+            goos: windows
+            artifact_name: image-studio-windows-amd64.exe
+            artifact_path: dist/image-studio-windows-amd64.exe
+            wails_args: -platform windows/amd64 -clean
+            package_cmd: cp image-studio/build/bin/image-studio.exe dist/image-studio-windows-amd64.exe
+          - id: macos-universal
+            runner: macos-latest
+            goos: darwin
+            artifact_name: image-studio-macos-universal.zip
+            artifact_path: dist/image-studio-macos-universal.zip
+            wails_args: -clean
+            package_cmd: ditto -c -k --sequesterRsrc --keepParent image-studio/build/bin/image-studio.app dist/image-studio-macos-universal.zip
+          - id: linux-amd64
+            runner: ubuntu-24.04
+            goos: linux
+            artifact_name: image-studio-linux-amd64.tar.gz
+            artifact_path: dist/image-studio-linux-amd64.tar.gz
+            wails_args: -clean -tags webkit2_41
+            package_cmd: tar -C image-studio/build/bin -czf dist/image-studio-linux-amd64.tar.gz image-studio
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,43 +49,106 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: "1.25"
           check-latest: true
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+
+      - name: Install Linux build dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Install Wails CLI
         shell: bash
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@latest
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - name: Build (windows/amd64)
+      - name: Build desktop app
         working-directory: image-studio
         shell: bash
-        run: wails build -platform windows/amd64 -clean
+        run: wails build ${{ matrix.wails_args }}
 
-      - name: Stage artifact
+      - name: Stage packaged artifact
         shell: bash
         run: |
           mkdir -p dist
-          cp image-studio/build/bin/image-studio.exe dist/image-studio-windows-amd64.exe
+          ${{ matrix.package_cmd }}
           ls -la dist/
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: image-studio-windows-amd64.exe
-          path: dist/image-studio-windows-amd64.exe
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
           retention-days: 14
 
-      - name: Attach to release (only on tag push)
-        if: startsWith(github.ref, 'refs/tags/v')
+  build-android-pad-frontend:
+    name: Build android-pad frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: image-studio/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: image-studio/frontend
+        run: npm ci
+
+      - name: Build android-pad frontend
+        working-directory: image-studio/frontend
+        run: npm run build:android-pad
+
+      - name: Package frontend bundle
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -C image-studio/frontend -czf dist/image-studio-android-pad-frontend.tar.gz dist
+          ls -la dist/
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-studio-android-pad-frontend.tar.gz
+          path: dist/image-studio-android-pad-frontend.tar.gz
+          retention-days: 14
+
+  publish-release:
+    name: Publish release assets
+    runs-on: ubuntu-24.04
+    needs:
+      - build-desktop
+      - build-android-pad-frontend
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten artifact layout
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          find dist -type f -maxdepth 2 -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/image-studio-windows-amd64.exe
+          files: release-assets/*
           fail_on_unmatched_files: true
           generate_release_notes: false

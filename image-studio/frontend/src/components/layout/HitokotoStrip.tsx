@@ -67,18 +67,18 @@ export function HitokotoStrip() {
 
   return (
     <div
-      className="hidden md:flex items-center gap-1.5 min-w-0 flex-1 mr-3 group cursor-pointer"
+      className="hidden min-w-0 items-center gap-1.5 md:flex md:flex-1 group cursor-pointer"
       title="点击换一句"
       onClick={() => setIdx((i) => rollIdx(i))}
     >
-      <span className="text-zinc-400 dark:text-zinc-600 shrink-0 select-none" aria-hidden>「</span>
-      <span className="text-xs text-zinc-600 dark:text-zinc-400 truncate italic">{q.text}</span>
+      <span className="shrink-0 select-none text-zinc-400 dark:text-zinc-600" aria-hidden>“</span>
+      <span className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">{q.text}</span>
       {q.from && (
-        <span className="text-[10px] text-zinc-500 dark:text-zinc-600 shrink-0 select-none">
+        <span className="shrink-0 select-none text-[10px] text-zinc-400 dark:text-zinc-500">
           — {q.from}
         </span>
       )}
-      <RefreshCw className="w-3 h-3 text-zinc-400 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      <RefreshCw className="h-3 w-3 shrink-0 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600" />
     </div>
   );
 }

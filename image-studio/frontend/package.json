@@ -4,8 +4,18 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev": "node ./scripts/platform-vite.mjs dev",
+    "dev:windows": "node ./scripts/platform-vite.mjs dev windows",
+    "dev:macos": "node ./scripts/platform-vite.mjs dev macos",
+    "dev:linux": "node ./scripts/platform-vite.mjs dev linux",
+    "dev:android": "node ./scripts/platform-vite.mjs dev android",
+    "dev:android-pad": "node ./scripts/platform-vite.mjs dev android-pad",
+    "build": "node ./scripts/platform-vite.mjs build",
+    "build:windows": "node ./scripts/platform-vite.mjs build windows",
+    "build:macos": "node ./scripts/platform-vite.mjs build macos",
+    "build:linux": "node ./scripts/platform-vite.mjs build linux",
+    "build:android": "node ./scripts/platform-vite.mjs build android",
+    "build:android-pad": "node ./scripts/platform-vite.mjs build android-pad",
     "preview": "vite preview"
   },
   "dependencies": {

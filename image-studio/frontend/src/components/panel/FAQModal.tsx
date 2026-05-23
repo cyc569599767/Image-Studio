@@ -1,5 +1,16 @@
 import { Modal } from "../common/Modal";
 import { OpenExternalURL } from "../../../wailsjs/go/backend/Service";
+import {
+  closeTabShortcutLabel,
+  copyShortcutLabel,
+  fullscreenShortcutLabel,
+  newTabShortcutLabel,
+  pasteShortcutLabel,
+  platformOutputRootLabel,
+  redoShortcutLabel,
+  submitShortcutLabel,
+  undoShortcutLabel,
+} from "../../lib/platform";
 
 export function FAQModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
@@ -82,7 +93,7 @@ export function FAQModal({ open, onClose }: { open: boolean; onClose: () => void
           </p>
           <ul>
             <li>检查 key 是否过期 / 余额是否充足 / 是否绑对了分组(见第一条)</li>
-            <li>试试切换网络通道:「设置 → 网络通道」改成 <code>curl</code> 让请求走系统 curl,有时能绕过原生 HTTP 的 TLS 问题</li>
+            <li>试试切换网络通道:「设置 → 网络通道」改成 <code>curl</code> 让请求走系统 curl,有时能绕过原生 HTTP 的 TLS 问题;新版本不会再把 API Key 暴露到 curl 命令行参数里</li>
             <li>查看历史项右键「📄 查看 raw 响应」看上游具体返回了什么</li>
           </ul>
         </details>
@@ -106,25 +117,25 @@ export function FAQModal({ open, onClose }: { open: boolean; onClose: () => void
             <strong>完全本地存储,不上传任何服务器</strong>(除了向上游 API 转发你的生成请求):
           </p>
           <ul>
-            <li>API Key:<code>localStorage</code></li>
-            <li>历史记录元数据:浏览器 IndexedDB</li>
-            <li>生成的图片 PNG:<code>%APPDATA%\image-studio\images\</code></li>
-            <li>导入的源图:<code>%APPDATA%\image-studio\imports\</code></li>
-            <li>原始上游响应:跟 PNG 同目录(<code>sse-response-*.txt</code> 或 <code>images-response-*.json</code>,排错时用)</li>
+            <li>API Key:系统安全存储(Keychain / Credential Manager / Secret Service)</li>
+            <li>历史记录元数据:本地 IndexedDB 数据库</li>
+            <li>生成的图片 PNG:<code>{platformOutputRootLabel()}/images/</code></li>
+            <li>导入的源图:系统 config 目录下的 <code>image-studio/imports/</code>(内部 scratch,与输出目录解耦)</li>
+            <li>原始上游响应:输出根目录的 <code>log/</code> 下(<code>sse-response-*.txt</code> 或 <code>images-response-*.json</code>,排错时用)</li>
           </ul>
         </details>
 
         <details>
           <summary>快捷键?</summary>
           <ul>
-            <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd> — 提交生成</li>
-            <li><kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> — 新建 / 关闭标签</li>
-            <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> — 撤销 / 重做</li>
-            <li><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> — 复制 / 粘贴图片</li>
+            <li><kbd>{submitShortcutLabel}</kbd> — 提交生成</li>
+            <li><kbd>{newTabShortcutLabel}</kbd> / <kbd>{closeTabShortcutLabel}</kbd> — 新建 / 关闭标签</li>
+            <li><kbd>{undoShortcutLabel}</kbd> / <kbd>{redoShortcutLabel}</kbd> — 撤销 / 重做</li>
+            <li><kbd>{copyShortcutLabel}</kbd> / <kbd>{pasteShortcutLabel}</kbd> — 复制 / 粘贴图片</li>
             <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — 拖动 / 蒙版 / 标注 工具</li>
             <li><kbd>空格</kbd> — 按住临时切到拖动</li>
             <li><kbd>F</kbd> — 重置视图;双击画板 — fit ↔ 100%</li>
-            <li><kbd>F11</kbd> — 全屏</li>
+            <li><kbd>{fullscreenShortcutLabel}</kbd> — 全屏</li>
             <li><kbd>[</kbd> / <kbd>]</kbd> — 笔刷大小</li>
             <li><kbd>Esc</kbd> — 取消生成 / 退出对比 / 关闭弹窗</li>
             <li><kbd>Delete</kbd> — 删除选中标注</li>

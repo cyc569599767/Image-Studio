@@ -12,6 +12,10 @@ import (
 // Event is one decoded SSE JSON object (the part after `data: `).
 type Event map[string]any
 
+func decodeEvent(payload string, ev *Event) error {
+	return json.Unmarshal([]byte(payload), ev)
+}
+
 // IterEvents returns an iterator over decoded SSE events in raw.
 // Lines that don't start with `data: `, or that hold `[DONE]`/empty, are skipped.
 // Malformed JSON is silently ignored (parity with Python iter_sse_events).
@@ -27,7 +31,7 @@ func IterEvents(raw string) iter.Seq[Event] {
 				continue
 			}
 			var ev Event
-			if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+			if err := decodeEvent(payload, &ev); err != nil {
 				continue
 			}
 			if !yield(ev) {
@@ -161,7 +165,7 @@ func SummarizeSSELine(line string) string {
 	}
 	payload := strings.TrimSpace(stripped[6:])
 	var ev Event
-	if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+	if err := decodeEvent(payload, &ev); err != nil {
 		return ""
 	}
 	evType, _ := ev["type"].(string)

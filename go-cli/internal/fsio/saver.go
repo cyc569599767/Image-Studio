@@ -10,12 +10,17 @@ import (
 	"github.com/yuanhua/image-gptcodex/pkg/client"
 )
 
+const (
+	privateDirMode  = 0o700
+	privateFileMode = 0o600
+)
+
 // EnsureDir creates dir (and parents) if it doesn't exist.
 func EnsureDir(dir string) error {
 	if dir == "" {
 		return fmt.Errorf("output directory is empty")
 	}
-	return os.MkdirAll(dir, 0o755)
+	return os.MkdirAll(dir, privateDirMode)
 }
 
 // SaveImage writes base64 PNG bytes to outputPath and returns the absolute path.
@@ -24,7 +29,7 @@ func SaveImage(imageB64, outputPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("decode base64: %w", err)
 	}
-	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
+	if err := os.WriteFile(outputPath, data, privateFileMode); err != nil {
 		return "", fmt.Errorf("write image: %w", err)
 	}
 	abs, err := filepath.Abs(outputPath)

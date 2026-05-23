@@ -6,9 +6,6 @@
 /image-studio/frontend/dist/
 /image-studio/frontend/node_modules/
 
-# Wails-generated TS bindings (regenerated on every `wails build` / `wails dev`)
-/image-studio/frontend/wailsjs/
-
 # Generated images, raw SSE dumps, imported sources
 # (raw SSE files include request headers — may leak API keys)
 /images/
@@ -19,11 +16,15 @@
 # Go
 *.test
 *.out
+.gocache/
+.gomodcache/
+.gopath/
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 # IDE / OS
 .vscode/
@@ -40,6 +41,11 @@ Thumbs.db
 .env
 .env.local
 *.local
+
+# Local caches / sandboxes
+.npm-cache/
+.sandbox-home/
+.tmp/
 
 # Frontend (wails-generated hash files)
 package-lock.json.md5

@@ -3,6 +3,8 @@ import { ClipboardCopy, Folder, RotateCw, Save, Sparkles, X } from "lucide-react
 import { useStudioStore } from "../../state/studioStore";
 import type { HistoryItem, SizeValue } from "../../types/domain";
 import { SaveImageAs, OpenOutputDir } from "../../../wailsjs/go/backend/Service";
+import { isWindows, submitShortcutLabel } from "../../lib/platform";
+import { useBlobURL } from "../../lib/images";
 
 const ASPECT_LABEL: Record<SizeValue, string> = {
   auto: "auto",
@@ -38,6 +40,7 @@ export function ResultDetailDrawer() {
   const aspect = ASPECT_LABEL[item.size as SizeValue] ?? "";
   const quality = QUALITY_LABEL[item.quality] ?? item.quality;
   const created = new Date(item.createdAt).toLocaleString();
+  const previewURL = useBlobURL(item.imageBlob ?? null, item.previewOnly ? item.imageB64 : null);
 
   function copy(text: string, label: string) {
     navigator.clipboard.writeText(text).then(
@@ -48,7 +51,7 @@ export function ResultDetailDrawer() {
 
   function useAsNextPrompt(text: string) {
     setField("prompt", text);
-    pushToast("已应用为下次 prompt,Ctrl+Enter 生成", "success");
+    pushToast(`已应用为下次 prompt,${submitShortcutLabel} 生成`, "success");
     close();
   }
 
@@ -65,16 +68,16 @@ export function ResultDetailDrawer() {
     <aside
       role="dialog"
       aria-label="生成详情"
-      className="fixed top-0 right-0 bottom-0 w-[420px] z-[9000] flex flex-col bg-white dark:bg-zinc-900 border-l border-black/[0.08] dark:border-white/[0.06] shadow-2xl animate-[rd-in_180ms_ease-out]"
+      className="fixed bottom-0 right-0 top-0 z-[9000] flex w-[420px] flex-col border-l border-black/[0.08] bg-white/92 shadow-[0_26px_80px_rgb(15_23_42_/_0.18)] backdrop-blur-2xl animate-[rd-in_180ms_ease-out] dark:border-white/[0.08] dark:bg-zinc-900/92"
       style={{ animation: "rd-in 180ms ease-out" }}
     >
       <style>{`@keyframes rd-in { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
-      <header className="flex items-center justify-between px-4 py-3 border-b border-black/[0.06] dark:border-white/[0.04]">
-        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">生成详情</span>
+      <header className="flex items-center justify-between border-b border-black/[0.06] px-4 py-3 dark:border-white/[0.04]">
+        <span className="text-[15px] font-semibold tracking-[-0.01em] text-zinc-900 dark:text-zinc-100">生成详情</span>
         <button
           onClick={close}
           title="关闭 (Esc)"
-          className="p-1 -mr-1 rounded text-zinc-500 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-100"
+          className={`-mr-1 p-1.5 text-zinc-500 hover:bg-black/[0.05] hover:text-zinc-900 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
         >
           <X className="w-4 h-4" />
         </button>
@@ -82,11 +85,12 @@ export function ResultDetailDrawer() {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* 预览 */}
-        <div className="rounded-lg ring-1 ring-black/[0.08] dark:ring-white/[0.06] p-2 bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center">
+        <div className={`flex items-center justify-center border border-black/[0.08] bg-[var(--surface)] p-2 dark:border-white/[0.06] ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}>
           <img
-            src={`data:image/png;base64,${item.imageB64}`}
+            src={previewURL ?? `data:image/png;base64,${item.imageB64}`}
             alt="生成结果"
-            className="max-w-full max-h-[280px] object-contain rounded"
+            decoding="async"
+            className={`max-h-[280px] max-w-full object-contain ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
           />
         </div>
 
@@ -124,7 +128,7 @@ export function ResultDetailDrawer() {
 
         {item.revisedPrompt && (
           <Section
-            title={<span className="inline-flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-emerald-400" /> 模型优化后</span>}
+            title={<span className="inline-flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-[var(--accent)]" /> 模型优化后</span>}
             hint="Responses API 模式下文本模型会优化原 prompt 再生图。要逐字使用,可在 prompt 框下勾「不优化提示词」。"
           >
             <PromptBlock highlight>{item.revisedPrompt}</PromptBlock>
@@ -137,7 +141,7 @@ export function ResultDetailDrawer() {
 
         <Section title="文件">
           {item.savedPath ? (
-            <p className="font-mono-token break-all bg-zinc-50 dark:bg-zinc-950 ring-1 ring-black/[0.06] dark:ring-white/[0.04] rounded-md px-2.5 py-1.5 text-[11px] text-zinc-600 dark:text-zinc-400" title={item.savedPath}>
+            <p className={`font-mono-token break-all border border-black/[0.06] bg-[var(--surface)] px-2.5 py-1.5 text-[11px] text-zinc-600 dark:border-white/[0.04] dark:text-zinc-400 ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`} title={item.savedPath}>
               {item.savedPath}
             </p>
           ) : (
@@ -162,8 +166,8 @@ function Section({ title, hint, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <section>
-      <h3 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">{title}</h3>
+    <section className={`border border-black/[0.05] bg-white/70 p-4 shadow-[var(--shadow-card)] dark:border-white/[0.06] dark:bg-white/[0.03] ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}>
+      <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">{title}</h3>
       {hint && <p className="text-[10px] text-zinc-500 mb-2 leading-relaxed">{hint}</p>}
       {children}
     </section>
@@ -187,13 +191,13 @@ function PromptBlock({ children, muted, highlight }: {
   highlight?: boolean;
 }) {
   return (
-    <p className={`mb-2 px-3 py-2 rounded-md text-xs leading-relaxed whitespace-pre-wrap break-words ${
+    <p className={`mb-2 whitespace-pre-wrap break-words px-3 py-2 text-xs leading-relaxed ${
       highlight
-        ? "bg-emerald-500/8 ring-1 ring-emerald-500/30 text-emerald-300"
+        ? "border border-[color:var(--accent)]/20 bg-[var(--accent-soft)] text-[var(--accent)]"
         : muted
-          ? "bg-zinc-100 dark:bg-zinc-950 ring-1 ring-black/[0.06] dark:ring-white/[0.04] text-zinc-500"
-          : "bg-zinc-100 dark:bg-zinc-950 ring-1 ring-black/[0.06] dark:ring-white/[0.04] text-zinc-700 dark:text-zinc-300"
-    }`}>
+          ? "border border-black/[0.06] bg-[var(--surface)] text-zinc-500 dark:border-white/[0.04]"
+          : "border border-black/[0.06] bg-[var(--surface)] text-zinc-700 dark:border-white/[0.04] dark:text-zinc-300"
+    } ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}>
       {children}
     </p>
   );
@@ -208,11 +212,11 @@ function Btn({ children, onClick, primary }: {
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] transition-colors ${
+      className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] transition-colors ${
         primary
-          ? "bg-emerald-500/12 text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/20"
-          : "ring-1 ring-black/[0.08] dark:ring-white/[0.06] text-zinc-700 dark:text-zinc-300 hover:ring-emerald-500/40 hover:text-emerald-400"
-      }`}
+          ? "border border-[color:var(--accent)]/20 bg-[var(--accent-soft)] text-[var(--accent)] hover:opacity-90"
+          : "border border-black/[0.08] text-zinc-700 hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.06] dark:text-zinc-300"
+      } ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
     >
       {children}
     </button>

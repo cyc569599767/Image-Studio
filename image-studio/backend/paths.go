@@ -10,6 +10,11 @@ import (
 	"github.com/yuanhua/image-gptcodex/pkg/client"
 )
 
+const (
+	secureDirMode  = 0o700
+	secureFileMode = 0o600
+)
+
 // defaultOutputDir 返回「输出根目录」(不带 images/log 子目录)。
 // 实际落盘位置由调用方走 imagesSubdir / logSubdir 拼出来。
 //
@@ -58,7 +63,7 @@ func writeBase64PNG(b64, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, secureFileMode); err != nil {
 		return "", err
 	}
 	abs, _ := filepath.Abs(path)

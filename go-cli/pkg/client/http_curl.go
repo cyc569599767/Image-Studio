@@ -17,9 +17,25 @@ type CurlTransport struct {
 	Binary string // path to curl binary, set by PickTransport
 }
 
+// BuildCurlConfig returns a curl config snippet carrying sensitive headers.
+// It is written to a private temp file so the API key does not appear in argv.
+func BuildCurlConfig(apiKey string) string {
+	headers := []string{
+		"Accept: */*",
+		"Content-Type: application/json",
+		"Authorization: Bearer " + apiKey,
+		"User-Agent: " + UserAgent,
+	}
+	var b strings.Builder
+	for _, header := range headers {
+		fmt.Fprintf(&b, "header = %q\n", header)
+	}
+	return b.String()
+}
+
 // BuildCurlArgs returns the curl arguments mirroring Python build_curl_command.
 // Exported for testing — tests assert -N, --data-binary @file presence and absence of -o.
-func BuildCurlArgs(apiKey, url, bodyPath string) []string {
+func BuildCurlArgs(url, bodyPath, configPath string) []string {
 	return []string{
 		"-sS",
 		"--no-progress-meter",
@@ -30,10 +46,7 @@ func BuildCurlArgs(apiKey, url, bodyPath string) []string {
 		"--max-time", "600",
 		"-X", "POST",
 		url,
-		"-H", "Accept: */*",
-		"-H", "Content-Type: application/json",
-		"-H", "Authorization: Bearer " + apiKey,
-		"-H", "User-Agent: " + UserAgent,
+		"--config", configPath,
 		"--data-binary", "@" + bodyPath,
 	}
 }
@@ -61,7 +74,21 @@ func (t *CurlTransport) Stream(ctx context.Context, req Request, rawSink io.Writ
 	tmpFile.Close()
 	defer os.Remove(tmpPath)
 
-	args := BuildCurlArgs(req.APIKey, req.URL, tmpPath)
+	cfgFile, err := os.CreateTemp("", "gptcodex-curl-*.cfg")
+	if err != nil {
+		return fmt.Errorf("create curl config: %w", err)
+	}
+	cfgPath := cfgFile.Name()
+	if _, err := cfgFile.WriteString(BuildCurlConfig(req.APIKey)); err != nil {
+		cfgFile.Close()
+		os.Remove(cfgPath)
+		return fmt.Errorf("write curl config: %w", err)
+	}
+	cfgFile.Close()
+	_ = os.Chmod(cfgPath, 0o600)
+	defer os.Remove(cfgPath)
+
+	args := BuildCurlArgs(req.URL, tmpPath, cfgPath)
 	cmd := exec.CommandContext(ctx, t.Binary, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -122,7 +149,7 @@ func EnsureTempDir(near string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(abs, 0o755); err != nil {
+	if err := os.MkdirAll(abs, 0o700); err != nil {
 		return "", err
 	}
 	return abs, nil

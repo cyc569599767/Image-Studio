@@ -1,7 +1,8 @@
-import { Github, Moon, Plus, Sun } from "lucide-react";
+import { Github, Monitor, Moon, Plus, Sun } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import { OpenExternalURL } from "../../../wailsjs/go/backend/Service";
 import { HitokotoStrip } from "./HitokotoStrip";
+import { isWindows, usesAppleUI } from "../../lib/platform";
 
 const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
 
@@ -10,34 +11,76 @@ export function AppHeader() {
   if (fullscreen) return null;
 
   return (
-    <header className="sticky top-0 z-40 h-9 px-3 flex items-center gap-2 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-xl border-b border-black/[0.08] dark:border-white/[0.06]">
-      {/* 左:每日一言。文字 "Image Studio" 不放,Windows 标题栏已经有了。 */}
-      <HitokotoStrip />
+    <header
+      className={`drag-region sticky top-0 z-40 flex items-center gap-3 border-b border-[var(--border)] bg-[var(--toolbar)] backdrop-blur-2xl ${
+        usesAppleUI
+          ? "min-h-[58px] pl-[92px] pr-5 pb-2 pt-3"
+          : isWindows
+            ? "min-h-[48px] px-3"
+            : "min-h-12 px-4"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div
+          className={`text-zinc-900 dark:text-zinc-100 ${
+            isWindows
+              ? "font-[600] text-[14px] tracking-[0]"
+              : "text-[13px] font-semibold tracking-[-0.01em]"
+          }`}
+          style={{ fontFamily: "var(--title-font)" }}
+        >
+          Image Studio
+        </div>
+        <div className={`flex min-w-0 items-center text-zinc-500 dark:text-zinc-400 ${isWindows ? "mt-0 text-[10px]" : "mt-0.5 text-[11px]"}`}>
+          <HitokotoStrip />
+        </div>
+      </div>
 
-      <div className="flex items-center gap-1 ml-auto">
-      <HeaderIconBtn
-        onClick={() => newWorkspace()}
-        title={workspaces.length > 1 ? `${workspaces.length} 个标签 · 新建` : "新建标签"}
-      >
-        <Plus className="w-4 h-4" />
-        {workspaces.length > 1 && (
-          <span className="absolute -top-0.5 -right-0.5 px-1 min-w-[14px] h-[14px] rounded-full bg-emerald-500 text-[9px] text-zinc-950 font-bold flex items-center justify-center">
-            {workspaces.length}
-          </span>
-        )}
-      </HeaderIconBtn>
-      <HeaderIconBtn
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        title={theme === "dark" ? "浅色主题" : "深色主题"}
-      >
-        {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-      </HeaderIconBtn>
-      <HeaderIconBtn
-        onClick={() => OpenExternalURL(REPO_URL).catch(() => pushToast("无法打开浏览器", "error"))}
-        title="GitHub"
-      >
-        <Github className="w-4 h-4" />
-      </HeaderIconBtn>
+      <div className={`no-drag ml-auto flex items-center ${isWindows ? "gap-1" : "gap-1.5"}`}>
+        <HeaderIconBtn
+          onClick={() => newWorkspace()}
+          title={workspaces.length > 1 ? `${workspaces.length} 个标签 · 新建` : "新建标签"}
+        >
+          <Plus className="h-4 w-4" />
+          {workspaces.length > 1 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-semibold text-white">
+              {workspaces.length}
+            </span>
+          )}
+        </HeaderIconBtn>
+        <div className={`platform-seg flex items-center p-0.5 ring-1 ${
+          isWindows
+            ? "bg-white/66 ring-black/[0.08] dark:bg-white/[0.04] dark:ring-white/[0.08]"
+            : "rounded-full bg-black/[0.04] ring-black/[0.05] dark:bg-white/[0.06] dark:ring-white/[0.06]"
+        }`}>
+          <HeaderToggleBtn
+            active={theme === "system"}
+            onClick={() => setTheme("system")}
+            title="跟随系统"
+          >
+            <Monitor className="h-3.5 w-3.5" />
+          </HeaderToggleBtn>
+          <HeaderToggleBtn
+            active={theme === "light"}
+            onClick={() => setTheme("light")}
+            title="浅色外观"
+          >
+            <Sun className="h-3.5 w-3.5" />
+          </HeaderToggleBtn>
+          <HeaderToggleBtn
+            active={theme === "dark"}
+            onClick={() => setTheme("dark")}
+            title="深色外观"
+          >
+            <Moon className="h-3.5 w-3.5" />
+          </HeaderToggleBtn>
+        </div>
+        <HeaderIconBtn
+          onClick={() => OpenExternalURL(REPO_URL).catch(() => pushToast("无法打开浏览器", "error"))}
+          title="GitHub"
+        >
+          <Github className="h-4 w-4" />
+        </HeaderIconBtn>
       </div>
     </header>
   );
@@ -53,7 +96,31 @@ function HeaderIconBtn({ children, onClick, title }: {
       type="button"
       onClick={onClick}
       title={title}
-      className="relative w-8 h-8 rounded-md flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+      className={`platform-icon-btn no-drag relative flex items-center justify-center text-zinc-600 transition-colors hover:bg-black/[0.05] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100 ${
+        isWindows ? "h-8 w-8 rounded-[8px]" : "h-8 w-8 rounded-full"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function HeaderToggleBtn({ active, children, onClick, title }: {
+  active: boolean;
+  children: React.ReactNode;
+  onClick: () => void;
+  title: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`platform-chip no-drag flex h-7 w-7 items-center justify-center transition-all ${
+        active
+          ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100"
+          : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+      } ${isWindows ? "rounded-[7px]" : "rounded-full"}`}
     >
       {children}
     </button>

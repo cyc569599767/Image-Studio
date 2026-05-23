@@ -1,5 +1,7 @@
 package backend
 
+import "strings"
+
 // --- UI-facing types -------------------------------------------------------
 
 // GenerateOptions is the request shape sent by the frontend.
@@ -32,6 +34,30 @@ type GenerateOptions struct {
 	APIMode        string `json:"apiMode"`        // "responses" (default) | "images"
 	// NoPromptRevision:true 时禁止 Responses API 文本模型改写 prompt;Images API 路径忽略。
 	NoPromptRevision bool `json:"noPromptRevision"`
+}
+
+// PromptOptimizeOptions is the request shape for one-click prompt revision.
+type PromptOptimizeOptions struct {
+	APIKey      string   `json:"apiKey"`
+	Prompt      string   `json:"prompt"`
+	Mode        string   `json:"mode"`
+	BaseURL     string   `json:"baseURL"`
+	TextModelID string   `json:"textModelID"`
+	ImagePaths  []string `json:"imagePaths"`
+	ImagePath   string   `json:"imagePath"`
+}
+
+func (o PromptOptimizeOptions) collectPaths() []string {
+	paths := make([]string, 0, len(o.ImagePaths)+1)
+	for _, p := range o.ImagePaths {
+		if strings.TrimSpace(p) != "" {
+			paths = append(paths, p)
+		}
+	}
+	if strings.TrimSpace(o.ImagePath) != "" {
+		paths = append(paths, o.ImagePath)
+	}
+	return paths
 }
 
 // JobStarted is the response to Generate/Edit.

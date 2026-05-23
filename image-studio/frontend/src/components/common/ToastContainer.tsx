@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import type { Toast } from "../../types/domain";
+import { isWindows } from "../../lib/platform";
 
 export function ToastContainer() {
   const toasts = useStudioStore((s) => s.toasts);
@@ -18,17 +19,15 @@ export function ToastContainer() {
 }
 
 function toneClasses(kind: Toast["kind"]): string {
-  // 浅色模式:用更深的文字色 + 浅且不透明的卡片背景,保证可读
-  // 深色模式:沿用原来的高透明 tint + 浅色文字
   switch (kind) {
     case "success":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-500/40 dark:bg-emerald-500/12 dark:text-emerald-300 dark:ring-emerald-500/30";
+      return "border-[color:var(--accent)]/18 bg-white/92 text-zinc-700 dark:bg-zinc-900/92 dark:text-zinc-200";
     case "error":
-      return "bg-red-50 text-red-700 ring-red-500/40 dark:bg-red-500/12 dark:text-red-300 dark:ring-red-500/30";
+      return "border-red-500/22 bg-white/92 text-red-700 dark:bg-zinc-900/92 dark:text-red-300";
     case "warn":
-      return "bg-amber-50 text-amber-800 ring-amber-500/40 dark:bg-amber-500/12 dark:text-amber-300 dark:ring-amber-500/30";
+      return "border-amber-500/24 bg-white/92 text-amber-800 dark:bg-zinc-900/92 dark:text-amber-300";
     default:
-      return "bg-blue-50 text-blue-700 ring-blue-500/40 dark:bg-blue-500/12 dark:text-blue-300 dark:ring-blue-500/30";
+      return "border-[color:var(--accent)]/18 bg-white/92 text-zinc-700 dark:bg-zinc-900/92 dark:text-zinc-200";
   }
 }
 
@@ -45,7 +44,7 @@ function ToneIcon({ kind }: { kind: Toast["kind"] }) {
 function ToastItem({ t, onClose }: { t: Toast; onClose: () => void }) {
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-2 rounded-xl ring-1 backdrop-blur shadow-2xl animate-[toast-in_180ms_ease-out] ${toneClasses(t.kind)}`}
+      className={`flex items-center gap-2 border px-3 py-2 backdrop-blur-2xl shadow-[var(--shadow-card-hover)] animate-[toast-in_180ms_ease-out] ${toneClasses(t.kind)} ${isWindows ? "rounded-[10px]" : "rounded-[18px]"}`}
       style={{ animation: "toast-in 180ms ease-out" }}
     >
       <ToneIcon kind={t.kind} />
@@ -63,7 +62,7 @@ function ToastItem({ t, onClose }: { t: Toast; onClose: () => void }) {
             t.action!.onClick();
             onClose();
           }}
-          className="px-2 py-1 text-[11px] font-medium rounded-md bg-current/15 hover:bg-current/25 transition-colors whitespace-nowrap"
+          className={`whitespace-nowrap bg-black/[0.04] px-2.5 py-1 text-[11px] font-medium transition-colors hover:bg-black/[0.08] dark:bg-white/[0.06] dark:hover:bg-white/[0.1] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
         >
           {t.action.label}
         </button>

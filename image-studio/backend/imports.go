@@ -37,14 +37,14 @@ func (s *Service) ImportImageFromB64(imageB64, suggestedName string) (ImportedIm
 	if err != nil {
 		return ImportedImage{}, err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, secureDirMode); err != nil {
 		return ImportedImage{}, err
 	}
 
 	ext := guessExt(suggestedName, data)
 	name := time.Now().Format("20060102-150405") + "-" + sanitiseName(suggestedName) + ext
 	full := filepath.Join(dir, name)
-	if err := os.WriteFile(full, data, 0o644); err != nil {
+	if err := os.WriteFile(full, data, secureFileMode); err != nil {
 		return ImportedImage{}, fmt.Errorf("write import file: %w", err)
 	}
 	return ImportedImage{Path: full, ImageB64: imageB64}, nil

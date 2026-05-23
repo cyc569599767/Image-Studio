@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ChevronDown, Download, Folder, FolderEdit, Github, Info, KeyRound,
-  MessageSquare, Moon, RotateCw, Settings as SettingsIcon, Sun, Trash2, Upload, X,
+  MessageSquare, Monitor, Moon, RotateCw, Settings as SettingsIcon, Sun, Trash2, Upload, X,
 } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import {
@@ -9,6 +9,8 @@ import {
 } from "../../../wailsjs/go/backend/Service";
 import type { TransportKind } from "../../types/domain";
 import { Modal } from "../common/Modal";
+import { rememberTrustedOutputRoot } from "../../lib/storage";
+import { isWindows, platformOutputRootLabel, platformRuntimeLabel, undoShortcutLabel } from "../../lib/platform";
 
 const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
 const MIT_URL = "https://opensource.org/licenses/MIT";
@@ -26,14 +28,14 @@ function PresetsRow() {
           <button
             onClick={() => applyPreset(p.id)}
             title={`${p.size} · ${p.quality}`}
-            className="flex-1 px-2.5 py-1.5 rounded-md text-xs text-left text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors"
+            className={`flex-1 border border-black/[0.08] px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             {p.name}
           </button>
           <button
             onClick={() => deletePreset(p.id)}
             title="删除"
-            className="p-1.5 rounded text-zinc-500 hover:text-red-400"
+            className={`p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             <X className="w-3 h-3" />
           </button>
@@ -41,7 +43,7 @@ function PresetsRow() {
       ))}
       <button
         onClick={onSave}
-        className="px-2.5 py-1.5 rounded-md text-xs text-zinc-500 ring-1 ring-dashed ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors"
+        className={`border border-dashed border-black/[0.12] px-3 py-2 text-xs text-zinc-500 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.1] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
       >
         + 保存当前参数
       </button>
@@ -51,7 +53,7 @@ function PresetsRow() {
 
 export function SettingsPanel() {
   const {
-    transport, baseURL, apiMode, openUpstreamConfig,
+    transport,
     theme, fontScale,
     setField, setAPIKey,
     history,
@@ -69,13 +71,18 @@ export function SettingsPanel() {
     GetOutputDir().then(setOutputDir).catch(() => undefined);
   }, [open]);
 
-  function clearAPIKey() {
+  async function clearAPIKey() {
     if (!confirm("确定清除已保存的 API Key 吗?")) return;
-    setAPIKey("");
+    try {
+      await setAPIKey("");
+      pushToast("已清除安全存储中的 API Key", "success");
+    } catch (e: any) {
+      pushToast(`清除失败:${e?.message ?? e}`, "error", 5000);
+    }
   }
 
   async function clearHistory() {
-    if (!confirm(`确定清除 ${history.length} 条历史记录吗?(本地 IndexedDB 也会删除)`)) return;
+    if (!confirm(`确定清除 ${history.length} 条历史记录吗?(本地数据库也会删除)`)) return;
     for (const h of history) {
       await useStudioStore.getState().deleteHistoryItem(h.id);
     }
@@ -86,21 +93,21 @@ export function SettingsPanel() {
       <button
         onClick={() => setOpen((v) => !v)}
         title="高级设置"
-        className="w-full flex items-center justify-between text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+        className={`flex w-full items-center justify-between border border-black/[0.05] bg-white/70 px-4 py-3 text-xs text-zinc-500 shadow-[var(--shadow-card)] transition-colors hover:text-zinc-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-zinc-200 ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}
       >
-        <span className="inline-flex items-center gap-1.5 uppercase tracking-wide">
+        <span className="inline-flex items-center gap-1.5 uppercase tracking-[0.12em]">
           <SettingsIcon className="w-3 h-3" /> 设置
         </span>
         <ChevronDown className={`w-3 h-3 opacity-60 transition-transform ${open ? "rotate-0" : "-rotate-90"}`} />
       </button>
       {open && (
-        <div className="flex flex-col gap-3.5 mt-3">
+        <div className={`mt-3 flex flex-col gap-3.5 border border-black/[0.05] bg-white/70 p-4 shadow-[var(--shadow-card)] dark:border-white/[0.06] dark:bg-white/[0.03] ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}>
           {/* 网络通道 */}
           <Row label="网络通道">
             <select
               value={transport}
               onChange={(e) => setField("transport", e.target.value as TransportKind)}
-              className="w-full bg-white dark:bg-zinc-950 ring-1 ring-black/[0.08] dark:ring-white/[0.06] rounded-md px-2.5 py-1.5 text-xs text-zinc-900 dark:text-zinc-200 focus-ring"
+              className={`focus-ring w-full border border-black/[0.08] bg-[var(--surface)] px-3 py-2 text-xs text-zinc-900 dark:border-white/[0.08] dark:text-zinc-100 ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}
             >
               <option value="auto">auto(原生 HTTP)</option>
               <option value="native">native(强制原生)</option>
@@ -113,14 +120,14 @@ export function SettingsPanel() {
 
           {/* 输出目录 */}
           <Row label="输出目录">
-            <div className="flex items-center gap-1 px-2 py-1.5 rounded-md ring-1 ring-black/[0.08] dark:ring-white/[0.06] bg-white dark:bg-zinc-950">
+            <div className={`flex items-center gap-1 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 dark:border-white/[0.08] ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}>
               <span title={outputDir} className="flex-1 text-[11px] font-mono-token text-zinc-700 dark:text-zinc-300 truncate">
                 {outputDir || "..."}
               </span>
               <button
                 onClick={() => OpenOutputDir().catch(() => undefined)}
-                title="在资源管理器中打开"
-                className="p-1 rounded text-zinc-500 hover:text-emerald-400"
+                title="在系统文件管理器中打开"
+                className={`p-1 text-zinc-500 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] ${isWindows ? "rounded-[6px]" : "rounded-full"}`}
               >
                 <Folder className="w-3.5 h-3.5" />
               </button>
@@ -132,6 +139,7 @@ export function SettingsPanel() {
                     const chosen = await ChooseOutputDir();
                     if (chosen) {
                       try { localStorage.setItem("gptcodex.outputDir", chosen); } catch {}
+                      rememberTrustedOutputRoot(chosen);
                       setOutputDir(chosen);
                       pushToast(`输出目录已切换:${chosen}`, "success");
                     }
@@ -139,7 +147,7 @@ export function SettingsPanel() {
                     pushToast(`切换失败:${e?.message ?? e}`, "error", 5000);
                   }
                 }}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors"
+                className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
               >
                 <FolderEdit className="w-3 h-3" /> 修改
               </button>
@@ -149,38 +157,27 @@ export function SettingsPanel() {
                     await SetOutputDir("");
                     try { localStorage.removeItem("gptcodex.outputDir"); } catch {}
                     const def = await GetOutputDir();
+                    rememberTrustedOutputRoot(def);
                     setOutputDir(def);
                     pushToast("已恢复默认输出目录", "success");
                   } catch (e: any) {
                     pushToast(`重置失败:${e?.message ?? e}`, "error", 5000);
                   }
                 }}
-                title="清除自定义路径,回到 %APPDATA%\image-studio\images"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-zinc-500 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors"
+                title={`清除自定义路径,回到 ${platformOutputRootLabel()}/images`}
+                className={`inline-flex items-center gap-1 border border-black/[0.08] px-3 py-2 text-xs text-zinc-500 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
               >
                 <RotateCw className="w-3 h-3" /> 默认
               </button>
             </div>
           </Row>
 
-          {/* 上游接入 */}
-          <Row label="上游接入">
-            <button
-              onClick={openUpstreamConfig}
-              className="w-full inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors"
-            >
-              <SettingsIcon className="w-3 h-3" />
-              修改上游配置(API 形态 / BASE_URL / Key / 模型)
-            </button>
-            <p className="text-[10px] text-zinc-500 mt-1.5">
-              当前 <span className="text-zinc-700 dark:text-zinc-300">{apiMode === "responses" ? "Responses API · SSE 保活" : "Images API · 标准 endpoints"}</span>
-              {baseURL && <> · <span className="font-mono-token">{baseURL.replace(/^https?:\/\//, "")}</span></>}
-            </p>
-          </Row>
-
           {/* 主题 */}
           <Row label="主题">
-            <div className="flex gap-1 p-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800/60 ring-1 ring-black/[0.06] dark:ring-white/[0.04]">
+            <div className={`flex gap-1 bg-black/[0.04] p-0.5 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:ring-white/[0.06] ${isWindows ? "rounded-[10px]" : "rounded-full"}`}>
+              <SegBtn active={theme === "system"} onClick={() => setTheme("system")}>
+                <Monitor className="w-3 h-3" /> 系统
+              </SegBtn>
               <SegBtn active={theme === "dark"} onClick={() => setTheme("dark")}>
                 <Moon className="w-3 h-3" /> 深色
               </SegBtn>
@@ -192,7 +189,7 @@ export function SettingsPanel() {
 
           {/* 字号 */}
           <Row label={`字号 ${Math.round(fontScale * 100)}%`}>
-            <div className="flex gap-1 p-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800/60 ring-1 ring-black/[0.06] dark:ring-white/[0.04]">
+            <div className={`flex gap-1 bg-black/[0.04] p-0.5 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:ring-white/[0.06] ${isWindows ? "rounded-[10px]" : "rounded-full"}`}>
               {[0.85, 1, 1.15].map((v) => (
                 <SegBtn key={v} active={Math.abs(fontScale - v) < 0.01} onClick={() => setFontScale(v)}>
                   {v === 0.85 ? "小" : v === 1 ? "中" : "大"}
@@ -211,14 +208,14 @@ export function SettingsPanel() {
             <button
               onClick={exportHistory}
               title="导出全部历史为 JSON"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors"
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
             >
               <Upload className="w-3 h-3" /> 导出历史
             </button>
             <button
               onClick={importHistory}
               title="从 JSON 文件导入"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors"
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
             >
               <Download className="w-3 h-3" /> 导入历史
             </button>
@@ -228,13 +225,13 @@ export function SettingsPanel() {
           <div className="flex gap-1.5">
             <button
               onClick={clearAPIKey}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-zinc-500 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:text-red-400 hover:ring-red-400/40 transition-colors"
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-500 transition-colors hover:border-red-400/40 hover:text-red-400 dark:border-white/[0.08] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
             >
               <KeyRound className="w-3 h-3" /> 清除 API Key
             </button>
             <button
               onClick={clearHistory}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-zinc-500 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:text-red-400 hover:ring-red-400/40 transition-colors"
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-500 transition-colors hover:border-red-400/40 hover:text-red-400 dark:border-white/[0.08] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
             >
               <Trash2 className="w-3 h-3" /> 清空历史
             </button>
@@ -242,13 +239,13 @@ export function SettingsPanel() {
 
           <button
             onClick={() => setAboutOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-zinc-500 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:ring-emerald-500/40 hover:text-emerald-400 transition-colors"
+            className={`inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-500 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             <Info className="w-3 h-3" /> 关于 Image Studio
           </button>
 
           <p className="text-[10px] text-zinc-500 leading-relaxed">
-            快捷键:1/2/3 切工具 · 空格临时拖动 · F 重置视图 · [ ] 调笔刷 · Ctrl+Z 撤销 · Esc 取消/退出对比 · Shift+点击历史 进入对比
+            {`快捷键:1/2/3 切工具 · 空格临时拖动 · F 重置视图 · [ ] 调笔刷 · ${undoShortcutLabel} 撤销 · Esc 取消/退出对比 · Shift+点击历史 进入对比`}
           </p>
         </div>
       )}
@@ -256,7 +253,7 @@ export function SettingsPanel() {
       {/* 关于 modal */}
       <Modal open={aboutOpen} onClose={() => setAboutOpen(false)} title="关于 Image Studio" width={460}>
         <div className="text-center mb-5">
-          <div className="w-14 h-14 mx-auto mb-2 rounded-2xl bg-white dark:bg-zinc-100 ring-1 ring-black/15 dark:ring-white/20 flex items-center justify-center">
+          <div className={`w-14 h-14 mx-auto mb-2 bg-white dark:bg-zinc-100 ring-1 ring-black/15 dark:ring-white/20 flex items-center justify-center ${isWindows ? "rounded-[12px]" : "rounded-2xl"}`}>
             <svg width="40" height="40" viewBox="0 0 1024 1024" fill="none" aria-hidden>
               <rect x="160" y="270" width="704" height="490" rx="56" stroke="#18181b" strokeWidth="56" />
               <path d="M 200 740 L 420 470 L 560 600 L 460 740 Z" fill="#52525b" />
@@ -268,18 +265,18 @@ export function SettingsPanel() {
           </div>
           <div className="text-lg font-bold">Image Studio</div>
           <div className="text-[11px] text-zinc-500 mt-0.5">
-            v0.1.4 · <span onClick={() => OpenExternalURL(MIT_URL).catch(() => undefined)} className="text-emerald-500 cursor-pointer hover:text-emerald-400">MIT License</span>
+            v0.1.4 · <span onClick={() => OpenExternalURL(MIT_URL).catch(() => undefined)} className="cursor-pointer text-[var(--accent)] hover:opacity-80">MIT License</span>
           </div>
         </div>
         <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
           一个开源的图片生成 / 编辑桌面客户端,基于 Wails(Go + React/TS)。
-          所有数据(API Key、历史记录、生成图)都保存在本地机器,不上传任何服务器。
+          所有数据(API Key、历史记录、生成图)都保存在本地机器,不上传任何服务器。API Key 走系统安全存储,不再保存在 localStorage。
         </p>
         <div className="mt-3.5 text-xs text-zinc-500 leading-relaxed space-y-0.5">
           <div><strong className="text-zinc-700 dark:text-zinc-300">技术栈:</strong></div>
           <div>· 后端:Go ≥ 1.25 / net/http SSE / pkg/client</div>
           <div>· 前端:React 18 + TypeScript / Tailwind v4 / zustand / react-konva</div>
-          <div>· 打包:Wails v2 / WebView2</div>
+          <div>· 打包:{platformRuntimeLabel()}</div>
           <div className="pt-1.5"><strong className="text-zinc-700 dark:text-zinc-300">支持的上游:</strong></div>
           <div>· 任何兼容 OpenAI <strong className="text-zinc-700 dark:text-zinc-300">Responses API</strong> 形态的中转站</div>
           <div>· 标准 <strong className="text-zinc-700 dark:text-zinc-300">Images API</strong>(generations + edits)</div>
@@ -287,13 +284,13 @@ export function SettingsPanel() {
         <div className="mt-4 flex gap-2">
           <button
             onClick={() => OpenExternalURL(REPO_URL).catch(() => undefined)}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-colors"
+            className={`flex-1 inline-flex items-center justify-center gap-1.5 bg-[var(--accent)] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-2)] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             <Github className="w-3.5 h-3.5" /> GitHub 仓库
           </button>
           <button
             onClick={() => OpenExternalURL(REPO_URL + "/issues").catch(() => undefined)}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs text-zinc-700 dark:text-zinc-300 ring-1 ring-black/[0.08] dark:ring-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             <MessageSquare className="w-3.5 h-3.5" /> 反馈
           </button>
@@ -311,7 +308,7 @@ export function SettingsPanel() {
 function Row({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[11px] uppercase tracking-wide text-zinc-500 mb-1.5">{label}</label>
+      <label className="mb-1.5 block text-[11px] uppercase tracking-[0.12em] text-zinc-400 dark:text-zinc-500">{label}</label>
       {children}
     </div>
   );
@@ -325,11 +322,11 @@ function SegBtn({ active, onClick, children }: {
   return (
     <button
       onClick={onClick}
-      className={`flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+      className={`flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${
         active
-          ? "bg-white dark:bg-zinc-900 text-emerald-500 shadow-sm"
+          ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100"
           : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
-      }`}
+      } ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
     >
       {children}
     </button>
