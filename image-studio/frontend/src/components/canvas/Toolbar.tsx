@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import { ANNOTATION_COLORS } from "../../types/domain";
-import { fullscreenShortcutLabel, isWindows, redoShortcutLabel, undoShortcutLabel, usesAppleUI } from "../../lib/platform";
+import { fullscreenShortcutLabel, isAndroidPhone, isWindows, redoShortcutLabel, undoShortcutLabel, usesAppleUI } from "../../lib/platform";
 
 export function Toolbar() {
   const {
@@ -24,7 +24,7 @@ export function Toolbar() {
   const hasImage = !!currentImage;
 
   return (
-    <div className={`flex items-center gap-1.5 overflow-x-auto border-b border-[var(--border)] bg-[var(--toolbar)] px-3 py-2 backdrop-blur-2xl ${usesAppleUI ? "liquid-glass-bar" : ""}`}>
+    <div className={`canvas-toolbar flex items-center gap-1.5 overflow-x-auto border-b border-[var(--border)] bg-[var(--toolbar)] px-3 py-2 backdrop-blur-2xl ${usesAppleUI ? "liquid-glass-bar" : ""}`}>
       <ToolBtn active={tool === "pan"} disabled={!hasImage} onClick={() => setField("tool", "pan")} title="拖动 / 缩放 (1)">
         <Hand className="w-3.5 h-3.5" />
       </ToolBtn>
@@ -120,7 +120,7 @@ export function Toolbar() {
 
       {currentImage && (
         <>
-          <Sep />
+          {!isAndroidPhone && <Sep />}
           <ToolBtn onClick={() => rotateCurrent(-90)} disabled={!currentImage.savedPath} title="左转 90°">
             <RotateCcw className="w-3.5 h-3.5" />
           </ToolBtn>
@@ -133,7 +133,7 @@ export function Toolbar() {
           <ToolBtn onClick={() => flipCurrent(false)} disabled={!currentImage.savedPath} title="竖直翻转">
             <FlipVertical className="w-3.5 h-3.5" />
           </ToolBtn>
-          {selRect && selRect.width && selRect.height && (
+          {!isAndroidPhone && selRect && selRect.width && selRect.height && (
             <button
               onClick={() => cropToRect(selRect.x, selRect.y, selRect.width!, selRect.height!)}
               title="裁出选中矩形"
@@ -159,7 +159,7 @@ export function Toolbar() {
             {resultGridOpen ? "单图" : `网格 ${batchResults.length}`}
           </button>
         )}
-        {currentImage && (
+        {currentImage && !isAndroidPhone && (
           <span className="text-[11px] text-zinc-500 font-mono-token">{currentImage.size}</span>
         )}
         <ToolBtn onClick={() => setField("fullscreen", !fullscreen)} title={fullscreen ? `退出全屏 (${fullscreenShortcutLabel})` : `全屏 (${fullscreenShortcutLabel})`}>

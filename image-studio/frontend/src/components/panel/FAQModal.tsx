@@ -1,5 +1,6 @@
 import { Modal } from "../common/Modal";
 import { OpenExternalURL } from "../../../wailsjs/go/backend/Service";
+import { openExternalURLForPlatform } from "../../lib/androidBridge";
 import {
   closeTabShortcutLabel,
   copyShortcutLabel,
@@ -147,7 +148,7 @@ export function FAQModal({ open, onClose }: { open: boolean; onClose: () => void
           <p>
             <a
               style={{ color: "var(--accent)", cursor: "pointer", textDecoration: "underline" }}
-              onClick={() => OpenExternalURL("https://github.com/RoseKhlifa/Image-Studio/issues").catch(() => undefined)}
+              onClick={() => openExternalURLForPlatform("https://github.com/RoseKhlifa/Image-Studio/issues", OpenExternalURL).catch(() => undefined)}
             >GitHub Issues</a> · 项目 MIT 协议开源
           </p>
         </details>

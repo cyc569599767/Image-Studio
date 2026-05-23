@@ -5,6 +5,7 @@ import type { HistoryItem, SizeValue } from "../../types/domain";
 import { SaveImageAs, OpenOutputDir } from "../../../wailsjs/go/backend/Service";
 import { isWindows, submitShortcutLabel, usesAppleUI } from "../../lib/platform";
 import { useBlobURL } from "../../lib/images";
+import { androidSaveHint, androidTarget, openOutputLocationForPlatform, saveImageForPlatform } from "../../lib/androidBridge";
 
 const ASPECT_LABEL: Record<SizeValue, string> = {
   auto: "auto",
@@ -58,10 +59,14 @@ export function ResultDetailDrawer() {
   function openSaveDialog() {
     const it = item!;
     const suggested = `image-${it.mode}-${it.id.slice(0, 8)}.png`;
-    SaveImageAs(it.imageB64, suggested).then(
+    saveImageForPlatform(it.imageB64, suggested, SaveImageAs).then(
       (p) => p && pushToast(`已保存:${p.split(/[\\/]/).pop()}`, "success"),
       (e) => pushToast(`保存失败:${e?.message ?? e}`, "error"),
     );
+  }
+
+  function openOutputLocation() {
+    openOutputLocationForPlatform(OpenOutputDir).catch((e) => pushToast(e?.message ?? "无法打开保存位置", "warn"));
   }
 
   return (
@@ -147,11 +152,14 @@ export function ResultDetailDrawer() {
           ) : (
             <p className="text-xs text-zinc-500 italic">(本次未落盘 / 路径丢失)</p>
           )}
+          {androidTarget.isAndroid && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-zinc-500">{androidSaveHint()}</p>
+          )}
           <div className="flex flex-wrap gap-1.5 mt-2">
             {item.savedPath && (
               <Btn onClick={() => copy(item.savedPath!, "路径")}><ClipboardCopy className="w-3 h-3" /> 复制路径</Btn>
             )}
-            <Btn onClick={() => OpenOutputDir().catch(() => undefined)}><Folder className="w-3 h-3" /> 打开文件夹</Btn>
+            <Btn onClick={openOutputLocation}><Folder className="w-3 h-3" /> {androidTarget.isAndroid ? "保存位置" : "打开文件夹"}</Btn>
             <Btn onClick={openSaveDialog}><Save className="w-3 h-3" /> 另存为</Btn>
           </div>
         </Section>

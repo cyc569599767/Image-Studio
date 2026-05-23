@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import type { ReactElement } from "react";
+import { History, Image as ImageIcon, SlidersHorizontal } from "lucide-react";
 import { AppHeader } from "./components/layout/AppHeader";
 import { WorkspaceBar } from "./components/layout/WorkspaceBar";
 import { FooterBar } from "./components/layout/FooterBar";
@@ -10,7 +12,7 @@ import { StatusBar } from "./components/canvas/StatusBar";
 import { HistoryRail } from "./components/history/HistoryRail";
 import { ToastContainer } from "./components/common/ToastContainer";
 import { useStudioStore } from "./state/studioStore";
-import { isMac } from "./lib/platform";
+import { isAndroidPhone, isAndroidPad, isMac } from "./lib/platform";
 
 const UpstreamConfigModal = lazy(() => import("./components/panel/UpstreamConfigModal").then((m) => ({ default: m.UpstreamConfigModal })));
 const ResultDetailDrawer = lazy(() => import("./components/panel/ResultDetailDrawer").then((m) => ({ default: m.ResultDetailDrawer })));
@@ -21,6 +23,7 @@ function App() {
   const importImageFile = useStudioStore((s) => s.importImageFile);
   const fullscreen = useStudioStore((s) => s.fullscreen);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [androidView, setAndroidView] = useState<"compose" | "canvas" | "history">("canvas");
   useEffect(() => { bootstrap(); }, [bootstrap]);
 
   // Global app-level shortcuts. Canvas-scoped shortcuts (undo/redo, tool
@@ -122,7 +125,11 @@ function App() {
 
       <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
       <WorkspaceBar />
-      <div className={`studio ${fullscreen ? "fullscreen" : ""}`}>
+      <div
+        className={`studio ${fullscreen ? "fullscreen" : ""} ${isAndroidPhone ? "android-phone" : ""} ${isAndroidPad ? "android-pad" : ""}`}
+        data-android-view={androidView}
+      >
+        {isAndroidPad && !fullscreen && <AndroidRail active={androidView} onChange={setAndroidView} />}
         <ControlPanel />
         <div className="canvas-shell">
           <Toolbar />
@@ -143,6 +150,7 @@ function App() {
         )}
       </div>
       <FooterBar />
+      {isAndroidPhone && !fullscreen && <AndroidBottomNav active={androidView} onChange={setAndroidView} />}
       <UpstreamConfigGate />
       <Suspense fallback={null}>
         <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -165,6 +173,57 @@ function UpstreamConfigGate() {
     <Suspense fallback={null}>
       <UpstreamConfigModal open={open} onClose={close} />
     </Suspense>
+  );
+}
+
+function AndroidRail({
+  active,
+  onChange,
+}: {
+  active: "compose" | "canvas" | "history";
+  onChange: (value: "compose" | "canvas" | "history") => void;
+}) {
+  return (
+    <nav className="android-rail" aria-label="Android Pad navigation">
+      <AndroidNavButton icon={<SlidersHorizontal />} label="参数" active={active === "compose"} onClick={() => onChange("compose")} />
+      <AndroidNavButton icon={<ImageIcon />} label="画布" active={active === "canvas"} onClick={() => onChange("canvas")} />
+      <AndroidNavButton icon={<History />} label="历史" active={active === "history"} onClick={() => onChange("history")} />
+    </nav>
+  );
+}
+
+function AndroidBottomNav({
+  active,
+  onChange,
+}: {
+  active: "compose" | "canvas" | "history";
+  onChange: (value: "compose" | "canvas" | "history") => void;
+}) {
+  return (
+    <nav className="android-bottom-nav" aria-label="Android navigation">
+      <AndroidNavButton icon={<SlidersHorizontal />} label="参数" active={active === "compose"} onClick={() => onChange("compose")} />
+      <AndroidNavButton icon={<ImageIcon />} label="画布" active={active === "canvas"} onClick={() => onChange("canvas")} />
+      <AndroidNavButton icon={<History />} label="历史" active={active === "history"} onClick={() => onChange("history")} />
+    </nav>
+  );
+}
+
+function AndroidNavButton({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: ReactElement;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className={`android-nav-button ${active ? "active" : ""}`} onClick={onClick} aria-current={active ? "page" : undefined}>
+      <span className="android-nav-icon">{icon}</span>
+      <span className="android-nav-label">{label}</span>
+    </button>
   );
 }
 

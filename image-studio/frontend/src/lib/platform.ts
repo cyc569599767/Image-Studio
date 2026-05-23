@@ -1,6 +1,6 @@
 export type UIPlatform = "macos" | "windows" | "linux" | "ios" | "android" | "web";
 export type UITargetPlatform = UIPlatform | "android-pad";
-export type UIFamily = "apple" | "fluent" | "generic";
+export type UIFamily = "apple" | "fluent" | "android" | "generic";
 
 function fromOverride(raw?: string): UITargetPlatform | null {
   switch ((raw ?? "").trim().toLowerCase()) {
@@ -42,7 +42,11 @@ function detectTargetPlatform(): UITargetPlatform {
   const source = `${uaDataPlatform} ${platform} ${userAgent}`.toLowerCase();
 
   if (/iphone|ipad|ipod|ios/.test(source)) return "ios";
-  if (/android/.test(source)) return "android";
+  if (/android/.test(source)) {
+    const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+    const wide = typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) >= 600;
+    return coarse && wide ? "android-pad" : "android";
+  }
   if (/mac/.test(source)) return "macos";
   if (/win/.test(source)) return "windows";
   if (/linux|x11/.test(source)) return "linux";
@@ -56,10 +60,12 @@ function normalizeRuntimePlatform(value: UITargetPlatform): UIPlatform {
 
 function familyForTarget(value: UITargetPlatform): UIFamily {
   switch (value) {
-    case "android-pad":
     case "macos":
     case "ios":
       return "apple";
+    case "android":
+    case "android-pad":
+      return "android";
     case "windows":
       return "fluent";
     default:
@@ -70,8 +76,11 @@ function familyForTarget(value: UITargetPlatform): UIFamily {
 export const targetPlatform = detectTargetPlatform();
 export const platform = normalizeRuntimePlatform(targetPlatform);
 export const uiFamily = familyForTarget(targetPlatform);
+export const isAndroid = platform === "android";
 export const isAndroidPad = targetPlatform === "android-pad";
+export const isAndroidPhone = targetPlatform === "android";
 export const usesAppleUI = uiFamily === "apple";
+export const usesAndroidUI = uiFamily === "android";
 export const isMac = platform === "macos" || platform === "ios";
 export const isWindows = platform === "windows";
 
@@ -92,13 +101,16 @@ export const undoShortcutLabel = isMac ? "⌘Z" : "Ctrl+Z";
 export const fullscreenShortcutLabel = isMac ? "⌃⌘F" : "F11";
 
 export function platformOutputRootLabel() {
+  if (isAndroidPad) return "应用图片目录 / MediaStore Pictures";
+  if (isAndroidPhone) return "系统下载 / 分享面板";
   if (isMac) return "~/Pictures/Image Studio";
   if (isWindows) return "%APPDATA%\\image-studio";
   return "~/Pictures/Image Studio";
 }
 
 export function platformRuntimeLabel() {
-  if (isAndroidPad) return "Android Pad WebView / macOS-style frontend";
+  if (isAndroidPad) return "Android Pad WebView / Material 3 adaptive frontend";
+  if (isAndroidPhone) return "Android WebView / Material 3 phone frontend";
   if (isMac) return "Wails v2 / WKWebView";
   if (isWindows) return "Wails v2 / WebView2";
   return "Wails v2 / WebKitGTK";

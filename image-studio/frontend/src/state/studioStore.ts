@@ -64,6 +64,7 @@ import {
 } from "../lib/security";
 import { base64ToBlob, blobToBase64, createPreviewBlob, getImageDimensionsFromBase64 } from "../lib/images";
 import { isWindows } from "../lib/platform";
+import { exportHistoryForPlatform, saveImageForPlatform } from "../lib/androidBridge";
 import {
   activeRuntimePatch,
   apiModeLabel,
@@ -939,7 +940,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     if (!cur) return;
     const suggested = `image-${cur.mode}-${cur.id.slice(0, 8)}.png`;
     try {
-      const saved = await SaveImageAs(cur.imageB64, suggested);
+      const saved = await saveImageForPlatform(cur.imageB64, suggested, SaveImageAs);
       if (saved) get().pushToast(`已保存:${saved.split(/[\\/]/).pop()}`, "success");
     } catch (e: any) {
       const msg = `保存失败:${e?.message ?? e}`;
@@ -1378,7 +1379,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       items: s.history.map(sanitizeHistoryForExport),
     };
     try {
-      const dst = await ExportHistoryToFile(JSON.stringify(payload, null, 2));
+      const dst = await exportHistoryForPlatform(JSON.stringify(payload, null, 2), ExportHistoryToFile);
       if (dst) s.pushToast(`已导出 ${s.history.length} 条 → ${dst.split(/[\\/]/).pop()}`, "success");
     } catch (e: any) {
       s.pushToast(`导出失败:${e?.message ?? e}`, "error");

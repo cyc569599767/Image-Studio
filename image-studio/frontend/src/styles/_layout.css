@@ -176,4 +176,242 @@
 }
 .studio.fullscreen { grid-template-columns: 0 minmax(0, 1fr) 0; }
 .studio.fullscreen .panel,
-.studio.fullscreen .history { display: none; }
+.studio.fullscreen .history,
+.studio.fullscreen .control-panel,
+.studio.fullscreen .history-rail,
+.studio.fullscreen .android-rail { display: none; }
+
+/* Android adaptive shell. Compact phones use bottom navigation and one
+ * workspace surface at a time; expanded tablets use a Material navigation rail
+ * plus roomy side panes. */
+html[data-ui-family="android"] .app-root {
+  background: var(--bg);
+}
+
+html[data-target-platform="android"] .studio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "main";
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg);
+}
+
+html[data-target-platform="android"] .control-panel,
+html[data-target-platform="android"] .canvas-shell,
+html[data-target-platform="android"] .history-rail {
+  grid-area: main;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+}
+
+html[data-target-platform="android"] .control-panel,
+html[data-target-platform="android"] .history-rail {
+  display: none;
+  padding: 12px;
+  background: var(--bg);
+}
+
+html[data-target-platform="android"] .control-panel > .platform-card,
+html[data-target-platform="android"] .history-rail > .platform-card {
+  box-shadow: none;
+}
+
+html[data-target-platform="android"] .control-panel textarea {
+  min-height: 150px;
+}
+
+html[data-target-platform="android"] .control-panel .sticky {
+  bottom: 0;
+  margin-left: -12px;
+  margin-right: -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+html[data-target-platform="android"] .studio[data-android-view="compose"] .control-panel,
+html[data-target-platform="android"] .studio[data-android-view="history"] .history-rail {
+  display: flex;
+}
+
+html[data-target-platform="android"] .studio[data-android-view="canvas"] .canvas-shell {
+  display: flex;
+}
+
+html[data-target-platform="android"] .studio[data-android-view="compose"] .canvas-shell,
+html[data-target-platform="android"] .studio[data-android-view="compose"] .history-rail,
+html[data-target-platform="android"] .studio[data-android-view="history"] .canvas-shell,
+html[data-target-platform="android"] .studio[data-android-view="history"] .control-panel {
+  display: none;
+}
+
+html[data-target-platform="android"] .app-header {
+  min-height: 64px;
+  background: var(--toolbar);
+}
+
+html[data-target-platform="android"] .canvas-toolbar {
+  min-height: 56px;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+html[data-target-platform="android"] .canvas-toolbar .platform-icon-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+}
+
+html[data-target-platform="android"] .canvas-toolbar .liquid-primary-button {
+  min-height: 44px;
+  padding-inline: 14px;
+}
+
+html[data-target-platform="android"] .stage-host {
+  border-radius: 0;
+}
+
+html[data-target-platform="android"] .android-bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-height: calc(72px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--toolbar);
+  box-shadow: 0 -2px 12px rgb(0 0 0 / 0.08);
+}
+
+html[data-ui-family="android"] .android-nav-button {
+  display: flex;
+  min-width: 0;
+  min-height: 56px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+html[data-ui-family="android"] .android-nav-button.active {
+  color: var(--accent);
+}
+
+html[data-ui-family="android"] .android-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+html[data-ui-family="android"] .android-nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+html[data-ui-family="android"] .android-nav-button.active .android-nav-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+html[data-target-platform="android-pad"] .studio {
+  grid-template-columns: 80px minmax(300px, 352px) minmax(0, 1fr) minmax(280px, 328px);
+  background: var(--bg);
+}
+
+html[data-target-platform="android-pad"] .studio.fullscreen {
+  grid-template-columns: 0 0 minmax(0, 1fr) 0;
+}
+
+html[data-target-platform="android-pad"] .android-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--toolbar);
+}
+
+html[data-target-platform="android-pad"] .android-rail .android-nav-button {
+  width: 64px;
+}
+
+html[data-target-platform="android-pad"] .control-panel,
+html[data-target-platform="android-pad"] .history-rail {
+  width: auto;
+  padding: 14px;
+  border-color: var(--border);
+}
+
+html[data-target-platform="android-pad"] .control-panel textarea {
+  min-height: 132px;
+}
+
+html[data-target-platform="android-pad"] .control-panel {
+  border-right: 1px solid var(--border);
+}
+
+html[data-target-platform="android-pad"] .history-rail {
+  border-left: 1px solid var(--border);
+}
+
+html[data-target-platform="android-pad"] .canvas-shell {
+  min-width: 0;
+}
+
+html[data-target-platform="android-pad"] .android-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 920px) {
+  html[data-target-platform="android-pad"] .studio {
+    grid-template-columns: 76px minmax(0, 1fr);
+    grid-template-areas: "rail main";
+    padding-bottom: 0;
+  }
+
+  html[data-target-platform="android-pad"] .android-rail {
+    grid-area: rail;
+  }
+
+  html[data-target-platform="android-pad"] .control-panel,
+  html[data-target-platform="android-pad"] .canvas-shell,
+  html[data-target-platform="android-pad"] .history-rail {
+    grid-area: main;
+    width: 100%;
+    border: 0;
+  }
+
+  html[data-target-platform="android-pad"] .control-panel,
+  html[data-target-platform="android-pad"] .history-rail {
+    display: none;
+    background: var(--bg);
+  }
+
+  html[data-target-platform="android-pad"] .studio[data-android-view="compose"] .control-panel,
+  html[data-target-platform="android-pad"] .studio[data-android-view="history"] .history-rail {
+    display: flex;
+  }
+
+  html[data-target-platform="android-pad"] .studio[data-android-view="compose"] .canvas-shell,
+  html[data-target-platform="android-pad"] .studio[data-android-view="history"] .canvas-shell {
+    display: none;
+  }
+}

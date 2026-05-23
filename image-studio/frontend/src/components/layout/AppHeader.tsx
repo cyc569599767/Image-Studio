@@ -2,7 +2,8 @@ import { Github, Monitor, Moon, Plus, Settings, Sun } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import { OpenExternalURL } from "../../../wailsjs/go/backend/Service";
 import { HitokotoStrip } from "./HitokotoStrip";
-import { isWindows, usesAppleUI } from "../../lib/platform";
+import { isAndroidPhone, isWindows, usesAndroidUI, usesAppleUI } from "../../lib/platform";
+import { openExternalURLForPlatform } from "../../lib/androidBridge";
 
 const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
 
@@ -15,6 +16,9 @@ export function AppHeader({ onOpenSettings }: { onOpenSettings: () => void }) {
       className={`drag-region sticky top-0 z-40 flex items-center gap-3 border-b border-[var(--border)] bg-[var(--toolbar)] backdrop-blur-2xl ${
         usesAppleUI ? "liquid-glass-bar" : ""
       } ${
+        usesAndroidUI
+          ? "min-h-[64px] px-4"
+          :
         usesAppleUI
           ? "min-h-[58px] pl-[92px] pr-5 pb-2 pt-3"
           : isWindows
@@ -50,7 +54,7 @@ export function AppHeader({ onOpenSettings }: { onOpenSettings: () => void }) {
             </span>
           )}
         </HeaderIconBtn>
-        <div className={`platform-seg flex items-center p-0.5 ring-1 ${
+        {!isAndroidPhone && <div className={`platform-seg flex items-center p-0.5 ring-1 ${
           isWindows
             ? "bg-white/66 ring-black/[0.08] dark:bg-white/[0.04] dark:ring-white/[0.08]"
             : "rounded-full bg-black/[0.04] ring-black/[0.05] dark:bg-white/[0.06] dark:ring-white/[0.06]"
@@ -76,9 +80,9 @@ export function AppHeader({ onOpenSettings }: { onOpenSettings: () => void }) {
           >
             <Moon className="h-3.5 w-3.5" />
           </HeaderToggleBtn>
-        </div>
+        </div>}
         <HeaderIconBtn
-          onClick={() => OpenExternalURL(REPO_URL).catch(() => pushToast("无法打开浏览器", "error"))}
+          onClick={() => openExternalURLForPlatform(REPO_URL, OpenExternalURL).catch(() => pushToast("无法打开浏览器", "error"))}
           title="GitHub"
         >
           <Github className="h-4 w-4" />

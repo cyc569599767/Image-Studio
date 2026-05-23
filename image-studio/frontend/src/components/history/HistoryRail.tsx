@@ -5,7 +5,7 @@ import type { HistoryItem, Mode } from "../../types/domain";
 import { ContextMenu, MenuItem } from "../common/ContextMenu";
 import { RawResponseModal } from "./RawResponseModal";
 import { useBlobURL } from "../../lib/images";
-import { isWindows, usesAppleUI } from "../../lib/platform";
+import { isWindows, usesAndroidUI, usesAppleUI } from "../../lib/platform";
 
 const FAQModal = lazy(() => import("../panel/FAQModal").then((m) => ({ default: m.FAQModal })));
 
@@ -101,7 +101,7 @@ export function HistoryRail() {
   if (fullscreen) return null;
 
   return (
-    <aside className={`flex w-[292px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-[var(--border)] bg-[var(--inspector)] px-3 py-4 backdrop-blur-2xl ${usesAppleUI ? "liquid-sidebar" : ""}`}>
+    <aside className={`history-rail flex w-[292px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-[var(--border)] bg-[var(--inspector)] px-3 py-4 backdrop-blur-2xl ${usesAppleUI ? "liquid-sidebar" : ""} ${usesAndroidUI ? "android-surface-pane" : ""}`}>
       <div className={`platform-card border border-black/[0.05] bg-white/70 p-3 shadow-[var(--shadow-card)] dark:border-white/[0.06] dark:bg-white/[0.03] ${isWindows ? "rounded-[12px]" : "rounded-[18px]"}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">

@@ -1,7 +1,8 @@
 import { Folder, Github, MessageSquare } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
 import { OpenExternalURL, OpenOutputDir } from "../../../wailsjs/go/backend/Service";
-import { isWindows, usesAppleUI } from "../../lib/platform";
+import { isAndroid, isWindows, usesAppleUI } from "../../lib/platform";
+import { androidTarget, openExternalURLForPlatform, openOutputLocationForPlatform } from "../../lib/androidBridge";
 
 const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
 const ISSUES_URL = "https://github.com/RoseKhlifa/Image-Studio/issues";
@@ -10,6 +11,7 @@ const VERSION = "0.1.4";
 export function FooterBar() {
   const { fullscreen, history, runningJobs, isRunning, workspaces, pushToast } = useStudioStore();
   if (fullscreen) return null;
+  if (isAndroid) return null;
   const totalRunning = workspaces.reduce((sum, w) => sum + (w.runningJobIds?.length ?? 0), 0);
   const activeRunning = isRunning;
   const anyRunning = activeRunning || totalRunning > 0;
@@ -20,14 +22,18 @@ export function FooterBar() {
   const todayCount = history.filter((h) => h.createdAt >= todayStart.getTime()).length;
 
   function open(url: string) {
-    OpenExternalURL(url).catch(() => pushToast("无法打开浏览器", "error"));
+    openExternalURLForPlatform(url, OpenExternalURL).catch(() => pushToast("无法打开浏览器", "error"));
+  }
+
+  function openOutputLocation() {
+    openOutputLocationForPlatform(OpenOutputDir).catch((e) => pushToast(e?.message ?? "无法打开保存位置", "warn"));
   }
 
   return (
     <footer className={`flex items-center justify-between border-t border-[var(--border)] bg-[var(--toolbar)] px-4 text-[11px] text-zinc-500 backdrop-blur-2xl dark:text-zinc-400 ${usesAppleUI ? "liquid-glass-bar" : ""} ${isWindows ? "min-h-[36px]" : "min-h-10"}`}>
       <div className="flex items-center gap-1">
-        <FooterBtn onClick={() => OpenOutputDir().catch(() => undefined)}>
-          <Folder className="h-3 w-3" /> 输出目录
+        <FooterBtn onClick={openOutputLocation}>
+          <Folder className="h-3 w-3" /> {androidTarget.isAndroid ? "保存位置" : "输出目录"}
         </FooterBtn>
         <FooterBtn onClick={() => open(REPO_URL)}>
           <Github className="h-3 w-3" /> GitHub

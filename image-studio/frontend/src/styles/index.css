@@ -277,6 +277,87 @@
   --window-outline: rgb(255 255 255 / 0.08);
 }
 
+/* Android / Material 3 targets. Phone and Pad share the same visual language,
+   while layout rules below split compact bottom navigation from expanded rail. */
+:root[data-ui-family="android"] {
+  --accent: #006a60;
+  --accent-2: #008577;
+  --accent-soft: rgb(0 106 96 / 0.12);
+  --bg: #f8faf6;
+  --bg-2: #eef4ef;
+  --panel: #ffffff;
+  --panel-2: #f0f5f0;
+  --surface: #f6fbf6;
+  --surface-2: #e6eee7;
+  --sidebar: #fbfdf8;
+  --inspector: #fbfdf8;
+  --toolbar: #fbfdf8;
+  --border: rgb(64 73 68 / 0.13);
+  --border-2: rgb(64 73 68 / 0.22);
+  --text: #191c1b;
+  --text-muted: rgb(64 73 68 / 0.74);
+  --text-dim: rgb(64 73 68 / 0.54);
+  --danger: #ba1a1a;
+  --danger-soft: rgb(186 26 26 / 0.1);
+  --success: #2f7d32;
+  --canvas-bg: #eef4ef;
+  --canvas-tile: #d7e2da;
+  --on-accent-soft: #004c43;
+  --btn-secondary-bg: #edf3ee;
+  --btn-secondary-bg-hover: #dfe8e2;
+  --tool-hover-bg: rgb(0 106 96 / 0.1);
+  --tool-hover-text: #004c43;
+  --error-text: #8c1d18;
+  --error-border: rgb(186 26 26 / 0.22);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.08), 0 2px 6px rgb(0 0 0 / 0.05);
+  --shadow-card-hover: 0 2px 4px rgb(0 0 0 / 0.12), 0 6px 18px rgb(0 0 0 / 0.08);
+  --window-blur: blur(0px);
+  --window-outline: transparent;
+  --header-height: 64px;
+  --tab-radius: 22px;
+  --card-radius: 16px;
+  --control-radius: 20px;
+  --surface-elevated: #ffffff;
+  --surface-elevated-dark: #202523;
+  --title-font: "Roboto Flex", "Google Sans", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  --body-font: "Roboto", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  --mono-font: "JetBrains Mono", ui-monospace, "Roboto Mono", Consolas, monospace;
+}
+
+:root.dark[data-ui-family="android"] {
+  --accent: #7bdacf;
+  --accent-2: #9bf2e8;
+  --accent-soft: rgb(123 218 207 / 0.16);
+  --bg: #101412;
+  --bg-2: #171d1a;
+  --panel: #1c211f;
+  --panel-2: #202623;
+  --surface: #202623;
+  --surface-2: #2a302d;
+  --sidebar: #181d1b;
+  --inspector: #181d1b;
+  --toolbar: #181d1b;
+  --border: rgb(218 230 224 / 0.1);
+  --border-2: rgb(218 230 224 / 0.18);
+  --text: #e1e4e1;
+  --text-muted: rgb(225 228 225 / 0.72);
+  --text-dim: rgb(225 228 225 / 0.48);
+  --danger: #ffb4ab;
+  --danger-soft: rgb(255 180 171 / 0.12);
+  --success: #8bd78d;
+  --canvas-bg: #151a18;
+  --canvas-tile: #27302c;
+  --on-accent-soft: #b7fff5;
+  --btn-secondary-bg: #252b28;
+  --btn-secondary-bg-hover: #303734;
+  --tool-hover-bg: rgb(123 218 207 / 0.14);
+  --tool-hover-text: #b7fff5;
+  --error-text: #ffdad6;
+  --error-border: rgb(255 180 171 / 0.28);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.34), 0 2px 10px rgb(0 0 0 / 0.22);
+  --shadow-card-hover: 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 22px rgb(0 0 0 / 0.28);
+}
+
 /* 老 data-theme 选择器映射到 .dark class,平滑过渡。 */
 html[data-theme="dark"] { /* same as :root.dark */ }
 html[data-theme="light"] {
@@ -322,6 +403,20 @@ html.dark[data-ui-family="apple"] body {
     radial-gradient(circle at 18% 12%, rgb(10 132 255 / 0.2), transparent 24rem),
     radial-gradient(circle at 86% 20%, rgb(255 55 95 / 0.1), transparent 21rem),
     linear-gradient(135deg, #080a0f 0%, #111824 48%, #171018 100%);
+}
+
+html[data-ui-family="android"] body {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(180deg, rgb(255 255 255 / 0.48), transparent 18rem),
+    linear-gradient(135deg, #f8faf6 0%, #eef4ef 54%, #f6f8f2 100%);
+  background-attachment: scroll;
+}
+
+html.dark[data-ui-family="android"] body {
+  background-image:
+    linear-gradient(180deg, rgb(123 218 207 / 0.05), transparent 18rem),
+    linear-gradient(135deg, #101412 0%, #151a18 52%, #111712 100%);
 }
 button, input, textarea, select { font-family: inherit; }
 
@@ -431,6 +526,65 @@ html.dark[data-ui-family="apple"] .liquid-ambient::after {
 
 html.dark .platform-card {
   background: var(--surface-elevated-dark);
+}
+
+html[data-ui-family="android"] .platform-card,
+html[data-ui-family="android"] .android-surface-pane {
+  border-radius: var(--card-radius);
+  border-color: var(--border);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: none;
+}
+
+html.dark[data-ui-family="android"] .platform-card,
+html.dark[data-ui-family="android"] .android-surface-pane {
+  background: var(--surface-elevated-dark);
+}
+
+html[data-ui-family="android"] .platform-seg,
+html[data-ui-family="android"] .platform-tab,
+html[data-ui-family="android"] .platform-action-btn,
+html[data-ui-family="android"] .platform-pill,
+html[data-ui-family="android"] .platform-icon-btn,
+html[data-ui-family="android"] .platform-chip,
+html[data-ui-family="android"] .liquid-primary-button {
+  border-radius: var(--control-radius);
+  min-height: 40px;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 90ms ease;
+}
+
+html[data-ui-family="android"] .platform-action-btn:active,
+html[data-ui-family="android"] .platform-pill:active,
+html[data-ui-family="android"] .platform-icon-btn:active,
+html[data-ui-family="android"] .platform-chip:active,
+html[data-ui-family="android"] .liquid-primary-button:active,
+html[data-ui-family="android"] .btn:active {
+  transform: scale(0.98);
+}
+
+html[data-ui-family="android"] .liquid-primary-button {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+}
+
+html[data-ui-family="android"] .liquid-primary-button:hover {
+  background: var(--accent-2);
+}
+
+html[data-ui-family="android"] .focus-ring:focus-visible,
+html[data-ui-family="android"] .input:focus,
+html[data-ui-family="android"] .textarea:focus,
+html[data-ui-family="android"] .select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 html[data-ui-family="apple"] .platform-card,

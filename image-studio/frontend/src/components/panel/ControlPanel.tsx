@@ -5,7 +5,7 @@ import {
 import { useStudioStore } from "../../state/studioStore";
 import { OpenFile } from "../../../wailsjs/go/backend/Service";
 import { SizeValue, QualityValue, Mode, OutputFormatValue, OUTPUT_FORMAT_OPTIONS } from "../../types/domain";
-import { isWindows, submitShortcutLabel, usesAppleUI } from "../../lib/platform";
+import { isAndroid, isWindows, submitShortcutLabel, usesAndroidUI, usesAppleUI } from "../../lib/platform";
 
 const PromptPopover = lazy(() => import("./PromptPopover").then((m) => ({ default: m.PromptPopover })));
 
@@ -59,7 +59,7 @@ export function ControlPanel() {
   );
 
   return (
-    <div className={`flex w-[336px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-[var(--border)] bg-[var(--sidebar)] px-4 py-4 backdrop-blur-2xl ${usesAppleUI ? "liquid-sidebar" : ""} ${isWindows ? "pt-3" : ""}`}>
+    <div className={`control-panel flex w-[336px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-[var(--border)] bg-[var(--sidebar)] px-4 py-4 backdrop-blur-2xl ${usesAppleUI ? "liquid-sidebar" : ""} ${usesAndroidUI ? "android-surface-pane" : ""} ${isWindows ? "pt-3" : ""}`}>
       <section className="platform-card px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -69,9 +69,11 @@ export function ControlPanel() {
             >
               图像工作台
             </h2>
-            <p className="mt-1 text-[12px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-              保持界面简洁，把注意力留给 prompt、参考图和结果。
-            </p>
+            {!isAndroid && (
+              <p className="mt-1 text-[12px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                保持界面简洁，把注意力留给 prompt、参考图和结果。
+              </p>
+            )}
           </div>
           <div className={`platform-pill bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--accent)] ${isWindows ? "rounded-[8px]" : "rounded-2xl"}`}>
             {mode === "edit" ? "Edit" : "Generate"}

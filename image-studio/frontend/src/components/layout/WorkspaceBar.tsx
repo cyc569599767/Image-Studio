@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { useStudioStore } from "../../state/studioStore";
-import { isWindows, usesAppleUI } from "../../lib/platform";
+import { isAndroidPhone, isWindows, usesAppleUI } from "../../lib/platform";
 
 // Browser-tab style strip. 每个 tab = 独立 workspace,历史栏共享。
 // 单 workspace 时不显示。
@@ -11,6 +11,7 @@ export function WorkspaceBar() {
   const [editingName, setEditingName] = useState("");
 
   if (fullscreen) return null;
+  if (isAndroidPhone) return null;
   if (workspaces.length <= 1) return null;
 
   function startRename(id: string, currentName: string) {

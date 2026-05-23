@@ -11,6 +11,7 @@ import type { TransportKind } from "../../types/domain";
 import { Modal } from "../common/Modal";
 import { rememberTrustedOutputRoot } from "../../lib/storage";
 import { isWindows, platformOutputRootLabel, platformRuntimeLabel, undoShortcutLabel } from "../../lib/platform";
+import { androidSaveHint, androidTarget, openExternalURLForPlatform, openOutputLocationForPlatform } from "../../lib/androidBridge";
 
 const REPO_URL = "https://github.com/RoseKhlifa/Image-Studio";
 const MIT_URL = "https://opensource.org/licenses/MIT";
@@ -87,6 +88,14 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     }
   }
 
+  function openOutputLocation() {
+    openOutputLocationForPlatform(OpenOutputDir).catch((e) => pushToast(e?.message ?? "无法打开保存位置", "warn"));
+  }
+
+  function openExternal(url: string) {
+    openExternalURLForPlatform(url, OpenExternalURL).catch(() => undefined);
+  }
+
   function closeSettings() {
     setAboutOpen(false);
     onClose();
@@ -113,57 +122,61 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
           </Row>
 
           {/* 输出目录 */}
-          <Row label="输出目录">
+          <Row label={androidTarget.isAndroid ? "保存位置" : "输出目录"}>
             <div className={`flex items-center gap-1 border border-black/[0.08] bg-[var(--surface)] px-3 py-2 dark:border-white/[0.08] ${isWindows ? "rounded-[10px]" : "rounded-[14px]"}`}>
               <span title={outputDir} className="flex-1 text-[11px] font-mono-token text-zinc-700 dark:text-zinc-300 truncate">
-                {outputDir || "..."}
+                {androidTarget.isAndroid ? platformOutputRootLabel() : (outputDir || "...")}
               </span>
               <button
-                onClick={() => OpenOutputDir().catch(() => undefined)}
-                title="在系统文件管理器中打开"
+                onClick={openOutputLocation}
+                title={androidTarget.isAndroid ? "打开 Android 保存位置" : "在系统文件管理器中打开"}
                 className={`p-1 text-zinc-500 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] ${isWindows ? "rounded-[6px]" : "rounded-full"}`}
               >
                 <Folder className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="flex gap-1.5 mt-1.5">
-              <button
-                onClick={async () => {
-                  try {
-                    const chosen = await ChooseOutputDir();
-                    if (chosen) {
-                      try { localStorage.setItem("gptcodex.outputDir", chosen); } catch {}
-                      rememberTrustedOutputRoot(chosen);
-                      setOutputDir(chosen);
-                      pushToast(`输出目录已切换:${chosen}`, "success");
+            {androidTarget.isAndroid ? (
+              <p className="mt-1.5 text-[10px] leading-relaxed text-zinc-500">{androidSaveHint()}</p>
+            ) : (
+              <div className="flex gap-1.5 mt-1.5">
+                <button
+                  onClick={async () => {
+                    try {
+                      const chosen = await ChooseOutputDir();
+                      if (chosen) {
+                        try { localStorage.setItem("gptcodex.outputDir", chosen); } catch {}
+                        rememberTrustedOutputRoot(chosen);
+                        setOutputDir(chosen);
+                        pushToast(`输出目录已切换:${chosen}`, "success");
+                      }
+                    } catch (e: any) {
+                      pushToast(`切换失败:${e?.message ?? e}`, "error", 5000);
                     }
-                  } catch (e: any) {
-                    pushToast(`切换失败:${e?.message ?? e}`, "error", 5000);
-                  }
-                }}
-                className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
-              >
-                <FolderEdit className="w-3 h-3" /> 修改
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    await SetOutputDir("");
-                    try { localStorage.removeItem("gptcodex.outputDir"); } catch {}
-                    const def = await GetOutputDir();
-                    rememberTrustedOutputRoot(def);
-                    setOutputDir(def);
-                    pushToast("已恢复默认输出目录", "success");
-                  } catch (e: any) {
-                    pushToast(`重置失败:${e?.message ?? e}`, "error", 5000);
-                  }
-                }}
-                title={`清除自定义路径,回到 ${platformOutputRootLabel()}/images`}
-                className={`inline-flex items-center gap-1 border border-black/[0.08] px-3 py-2 text-xs text-zinc-500 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
-              >
-                <RotateCw className="w-3 h-3" /> 默认
-              </button>
-            </div>
+                  }}
+                  className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-700 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] dark:text-zinc-300 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
+                >
+                  <FolderEdit className="w-3 h-3" /> 修改
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await SetOutputDir("");
+                      try { localStorage.removeItem("gptcodex.outputDir"); } catch {}
+                      const def = await GetOutputDir();
+                      rememberTrustedOutputRoot(def);
+                      setOutputDir(def);
+                      pushToast("已恢复默认输出目录", "success");
+                    } catch (e: any) {
+                      pushToast(`重置失败:${e?.message ?? e}`, "error", 5000);
+                    }
+                  }}
+                  title={`清除自定义路径,回到 ${platformOutputRootLabel()}/images`}
+                  className={`inline-flex items-center gap-1 border border-black/[0.08] px-3 py-2 text-xs text-zinc-500 transition-colors hover:border-[color:var(--accent)]/35 hover:text-[var(--accent)] dark:border-white/[0.08] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
+                >
+                  <RotateCw className="w-3 h-3" /> 默认
+                </button>
+              </div>
+            )}
           </Row>
 
           {/* 主题 */}
@@ -259,7 +272,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
           </div>
           <div className="text-lg font-bold">Image Studio</div>
           <div className="text-[11px] text-zinc-500 mt-0.5">
-            v0.1.4 · <span onClick={() => OpenExternalURL(MIT_URL).catch(() => undefined)} className="cursor-pointer text-[var(--accent)] hover:opacity-80">MIT License</span>
+            v0.1.4 · <span onClick={() => openExternal(MIT_URL)} className="cursor-pointer text-[var(--accent)] hover:opacity-80">MIT License</span>
           </div>
         </div>
         <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
@@ -277,13 +290,13 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         </div>
         <div className="mt-4 flex gap-2">
           <button
-            onClick={() => OpenExternalURL(REPO_URL).catch(() => undefined)}
+            onClick={() => openExternal(REPO_URL)}
             className={`liquid-primary-button flex-1 inline-flex items-center justify-center gap-1.5 bg-[var(--accent)] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-2)] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             <Github className="w-3.5 h-3.5" /> GitHub 仓库
           </button>
           <button
-            onClick={() => OpenExternalURL(REPO_URL + "/issues").catch(() => undefined)}
+            onClick={() => openExternal(REPO_URL + "/issues")}
             className={`flex-1 inline-flex items-center justify-center gap-1.5 border border-black/[0.08] px-3 py-2 text-xs text-zinc-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.06] ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
           >
             <MessageSquare className="w-3.5 h-3.5" /> 反馈
