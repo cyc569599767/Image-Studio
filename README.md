@@ -79,7 +79,8 @@
 | **Windows x64** | `image-studio-windows-amd64.exe` | ~29 MB | 双击运行;需 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)(Win10+ 大部分已预装) |
 | **macOS** (universal) | `image-studio-macos-universal.zip` | ~32 MB | 解压后 `xattr -dr com.apple.quarantine image-studio.app` 去 Gatekeeper 隔离,或右键 → 打开 |
 | **Linux x64** | `image-studio-linux-amd64.tar.gz` | ~16 MB | `tar -xzf` 解压 → `chmod +x image-studio` → 运行;需 `libgtk-3-0 libwebkit2gtk-4.1-0`(桌面 Ubuntu 22.04+ / 24.04 默认装好) |
-| **Android Pad 前端包** | `image-studio-android-pad-frontend.tar.gz` | 前端静态资源 | 供 Android 平板壳层集成,使用 Material 3 自适应大屏布局 |
+| **Android Phone APK** | `image-studio-android-phone-release.apk` | Android APK | WebView 壳层 + Android 手机 Material 3 前端 |
+| **Android Pad APK** | `image-studio-android-pad-release.apk` | Android APK | WebView 壳层 + Android 平板 Material 3 自适应布局 |
 
 > Wails v2 不支持跨平台编译,以上三个产物分别在各自原生平台上 build。代码本身跨平台,有问题欢迎 issue。
 
@@ -99,6 +100,14 @@ wails dev
 
 # 生产构建,输出到 build/bin/image-studio.exe (~29MB,内嵌字体 + Tailwind 资源)
 wails build
+```
+
+Android APK:
+
+```bash
+cd android-shell
+./gradlew assemblePhoneRelease
+./gradlew assemblePadRelease
 ```
 
 前端主题也支持单独按平台预览/构建,方便你在不切系统的情况下检查原生主题:
@@ -134,6 +143,8 @@ npm run build:android-pad
 - **Linux / 其他**:走通用主题分支,避免强行伪装成某个平台
 - **Android 手机**:`android` 目标使用 Material 3 紧凑布局,底部导航切换 参数 / 画布 / 历史,保存优先走 Android 壳层 bridge,缺失时回退系统分享/下载
 - **Android Pad**:`android-pad` 目标使用 Material 3 大屏布局,navigation rail + 三栏自适应,保留 Android 运行时语义和保存差异
+
+Android 壳层工程位于 `android-shell/`。CI 会分别执行 `assemblePhoneRelease` 和 `assemblePadRelease`，两个 flavor 在构建时各自触发前端 `build:android` / `build:android-pad`，再把产物拷进 APK assets。
 
 运行时前端会自动给根节点注入 `data-platform` / `data-target-platform` / `data-ui-family`,CSS token 和组件壳层按这些属性切换,因此平台主题和 Android 手机/Pad 布局可以继续扩展,而不需要动生成、画布、历史等主逻辑。
 

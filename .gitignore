@@ -5,6 +5,11 @@
 /image-studio/build/windows/build/
 /image-studio/frontend/dist/
 /image-studio/frontend/node_modules/
+/android-shell/.gradle/
+/android-shell/.gradle-wrapper/
+/android-shell/app/build/
+/android-shell/local.properties
+/android-shell/app/src/main/assets/web/
 
 # Generated images, raw SSE dumps, imported sources
 # (raw SSE files include request headers — may leak API keys)

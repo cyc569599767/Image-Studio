@@ -1,6 +1,7 @@
 import { isAndroid, isAndroidPad, isAndroidPhone } from "./platform";
 
-type AndroidBridge = {
+export type AndroidBridge = {
+  invoke?: (requestId: string, method: string, payloadJson: string) => void;
   saveImage?: (imageB64: string, suggestedName: string) => string | Promise<string>;
   shareImage?: (imageB64: string, suggestedName: string) => string | Promise<string>;
   openOutputDir?: () => string | Promise<string | void>;

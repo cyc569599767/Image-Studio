@@ -1,7 +1,7 @@
 name: Release
 
-# Build desktop targets in parallel and produce an Android Pad frontend bundle
-# that reuses the macOS visual design tokens.
+# Build desktop targets in parallel and produce Android APKs for phone and pad
+# shells from the bundled WebView wrapper in `android-shell/`.
 
 on:
   push:
@@ -90,12 +90,30 @@ jobs:
           path: ${{ matrix.artifact_path }}
           retention-days: 14
 
-  build-android-pad-frontend:
-    name: Build android-pad frontend
+  build-android-apk:
+    name: Build ${{ matrix.id }} apk
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: phone
+            gradle_task: assemblePhoneRelease
+            artifact_name: image-studio-android-phone-release-unsigned.apk
+            artifact_path: android-shell/app/build/outputs/apk/phone/release/app-phone-release-unsigned.apk
+          - id: pad
+            gradle_task: assemblePadRelease
+            artifact_name: image-studio-android-pad-release-unsigned.apk
+            artifact_path: android-shell/app/build/outputs/apk/pad/release/app-pad-release-unsigned.apk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -104,26 +122,30 @@ jobs:
           cache: npm
           cache-dependency-path: image-studio/frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: image-studio/frontend
-        run: npm ci
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Build android-pad frontend
-        working-directory: image-studio/frontend
-        run: npm run build:android-pad
+      - name: Install Android packages
+        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Package frontend bundle
-        shell: bash
+      - name: Write Android local.properties
         run: |
-          mkdir -p dist
-          tar -C image-studio/frontend -czf dist/image-studio-android-pad-frontend.tar.gz dist
-          ls -la dist/
+          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > android-shell/local.properties
 
-      - name: Upload frontend artifact
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Build ${{ matrix.id }} apk
+        run: |
+          gradle -p android-shell --no-daemon ${{ matrix.gradle_task }}
+
+      - name: Upload apk artifact
         uses: actions/upload-artifact@v4
         with:
-          name: image-studio-android-pad-frontend.tar.gz
-          path: dist/image-studio-android-pad-frontend.tar.gz
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
           retention-days: 14
 
   publish-release:
@@ -131,7 +153,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - build-desktop
-      - build-android-pad-frontend
+      - build-android-apk
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Download all artifacts
