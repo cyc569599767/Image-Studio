@@ -40,7 +40,7 @@ export function ControlPanel() {
     outputFormat, batchCount,
     sources, currentImage,
     errorMessage, errorRawPath, isRunning, lastPayload, isTestingKey, isOptimizingPrompt,
-    apiMode, baseURL, responsesConfig,
+    apiMode, baseURL, profiles,
     noPromptRevision,
     setField, clearError, pushToast,
     selectSourceImage, removeSource, clearSources,
@@ -50,12 +50,14 @@ export function ControlPanel() {
   const [promptPopover, setPromptPopover] = useState(false);
 
   const promptLen = prompt.length;
+  // 优化按钮只要有任一可用的 Responses profile 或当前 active 已配置就启用。
+  // (实际 prompt 优化在 store.optimizePrompt 里会找到 Responses 那条 profile 跑;
+  // 这里只判断 UI 是否能点。)
+  const hasUsableResponsesProfile = profiles.some(
+    (p) => p.apiMode === "responses" && p.baseURL.trim(),
+  );
   const optimizeReady = !!(
-    prompt.trim()
-    && (
-      (responsesConfig.apiKey.trim() && responsesConfig.baseURL.trim())
-      || (apiKey.trim() && baseURL.trim())
-    )
+    prompt.trim() && (hasUsableResponsesProfile || (apiKey.trim() && baseURL.trim()))
   );
 
   return (

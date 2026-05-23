@@ -46,30 +46,6 @@ export namespace backend {
 	        this.concurrencyLimit = source["concurrencyLimit"];
 	    }
 	}
-	export class PromptOptimizeOptions {
-	    apiKey: string;
-	    prompt: string;
-	    mode: string;
-	    baseURL: string;
-	    textModelID: string;
-	    imagePaths: string[];
-	    imagePath: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new PromptOptimizeOptions(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.apiKey = source["apiKey"];
-	        this.prompt = source["prompt"];
-	        this.mode = source["mode"];
-	        this.baseURL = source["baseURL"];
-	        this.textModelID = source["textModelID"];
-	        this.imagePaths = source["imagePaths"];
-	        this.imagePath = source["imagePath"];
-	    }
-	}
 	export class ImageTransformResult {
 	    path: string;
 	
@@ -108,6 +84,30 @@ export namespace backend {
 	        this.jobId = source["jobId"];
 	    }
 	}
+	export class PromptOptimizeOptions {
+	    apiKey: string;
+	    prompt: string;
+	    mode: string;
+	    baseURL: string;
+	    textModelID: string;
+	    imagePaths: string[];
+	    imagePath: string;
+
+	    static createFrom(source: any = {}) {
+	        return new PromptOptimizeOptions(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.apiKey = source["apiKey"];
+	        this.prompt = source["prompt"];
+	        this.mode = source["mode"];
+	        this.baseURL = source["baseURL"];
+	        this.textModelID = source["textModelID"];
+	        this.imagePaths = source["imagePaths"];
+	        this.imagePath = source["imagePath"];
+	    }
+	}
 	export class SelectFileResponse {
 	    path: string;
 	    size: number;
@@ -122,5 +122,4 @@ export namespace backend {
 	        this.size = source["size"];
 	    }
 	}
-
 }

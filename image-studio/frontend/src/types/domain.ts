@@ -3,6 +3,31 @@
 
 export type Mode = "generate" | "edit";
 
+// 上游 API 形态 —— Responses (`/v1/responses` + SSE) 或标准 Images API。
+// 老代码里以前是顶层全局二选一,v0.1.6 起降级成 profile 的字段。
+export type APIMode = "responses" | "images";
+
+// UpstreamProfile 是一组完整可用于生成的上游配置。用户可以保存多个,例如
+// 「gptcodex 主号 / gptcodex 备号 / OpenAI 直连」,在 UI 里下拉切换 active。
+//
+// 注意 apiKey 不在这里 —— 它走系统凭据存储(Keychain / Credential Manager /
+// Secret Service),用 profile.id 作为 keyring "user" 寻址。JSON 导出 /
+// localStorage 里都不会出现明文 key。
+export interface UpstreamProfile {
+  id: string;
+  name: string;
+  apiMode: APIMode;
+  baseURL: string;
+  textModelID: string;
+  imageModelID: string;
+  // 0 = 不限。同一 profile 跨所有 workspace 共享并发计数。
+  concurrencyLimit: number;
+  createdAt: number;
+  // 最近一次被 setActive / 提交生成 时更新;用于把最近使用过的 profile 在
+  // 下拉里排到前面,以及下次启动默认 active。
+  lastUsedAt?: number;
+}
+
 export type SizeValue = "auto" | "1024x1024" | "1536x1024" | "1024x1536" | "2048x1152" | "1152x2048";
 export type QualityValue = "auto" | "high" | "medium" | "low";
 export type TransportKind = "auto" | "native" | "curl";

@@ -13,6 +13,7 @@ import {
   Cancel as wailsCancel,
   OpenImageDialog,
   GetOutputDir,
+  DeleteStoredAPIKey,
   GetStoredAPIKey,
   SetStoredAPIKey,
   SaveImageAs,
@@ -28,6 +29,7 @@ import {
 } from "../../wailsjs/go/backend/Service";
 import type { backend } from "../../wailsjs/go/models";
 import {
+  APIMode,
   HistoryItem,
   Mode,
   OutputFormatValue,
@@ -39,6 +41,7 @@ import {
   ThemeMode,
   Toast,
   TransportKind,
+  UpstreamProfile,
   Workspace,
   Annotation,
 } from "../types/domain";
@@ -62,6 +65,17 @@ import {
   suggestedImportNameForHistory,
   validateBaseURL,
 } from "../lib/security";
+import {
+  ACTIVE_PROFILE_LS_KEY,
+  PROFILES_LS_KEY,
+  apiModeLabel as profileApiModeLabel,
+  duplicateProfile as cloneProfile,
+  genProfileId,
+  keyringUserFor,
+  makeBlankProfile,
+  pickActiveProfile,
+  tryParseProfile,
+} from "../lib/profiles";
 import { base64ToBlob, blobToBase64, createPreviewBlob, getImageDimensionsFromBase64 } from "../lib/images";
 import { isWindows } from "../lib/platform";
 import { exportHistoryForPlatform, saveImageForPlatform } from "../lib/androidBridge";
@@ -178,6 +192,47 @@ function saveModeField(mode: "responses" | "images", field: Exclude<keyof ModeCo
   try { localStorage.setItem(`gptcodex.${mode}.${field}`, String(value)); } catch {}
 }
 
+// ---- v0.1.6 多 profile 持久化 ---------------------------------------------
+
+// 把整个 profile 列表写 localStorage。apiKey 已经在 keyring,这里只存元数据。
+function persistProfiles(list: UpstreamProfile[]) {
+  try { localStorage.setItem(PROFILES_LS_KEY, JSON.stringify(list)); } catch {}
+}
+
+function persistActiveProfileId(id: string) {
+  try {
+    if (id) localStorage.setItem(ACTIVE_PROFILE_LS_KEY, id);
+    else localStorage.removeItem(ACTIVE_PROFILE_LS_KEY);
+  } catch {}
+}
+
+function loadStoredProfiles(): UpstreamProfile[] {
+  try {
+    const raw = localStorage.getItem(PROFILES_LS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.map((x) => tryParseProfile(x)).filter((p): p is UpstreamProfile => p !== null);
+  } catch {
+    return [];
+  }
+}
+
+function loadStoredActiveProfileId(): string {
+  try { return localStorage.getItem(ACTIVE_PROFILE_LS_KEY) ?? ""; } catch { return ""; }
+}
+
+// 清理 v0.1.5 及之前的「按 mode 二选一」遗留 localStorage 键。
+// 迁移到 profile 列表之后调一次,避免下次启动还重复迁移。
+function clearLegacyModeLocalStorage() {
+  for (const mode of ["responses", "images"] as const) {
+    for (const field of ["baseURL", "textModelID", "imageModelID", "concurrencyLimit"]) {
+      try { localStorage.removeItem(`gptcodex.${mode}.${field}`); } catch {}
+    }
+  }
+  try { localStorage.removeItem("gptcodex.apiMode"); } catch {}
+}
+
 interface StudioState {
   // ---- Form state ----
   apiKey: string;
@@ -191,23 +246,26 @@ interface StudioState {
   seed: number;          // 0 = random
   transport: TransportKind;
 
-  // 顶层的「当前生效」上游配置 —— 它实际等于 responsesConfig 或 imagesConfig 里
-  // 一份的镜像,具体取决于 apiMode。改 apiMode 时这 4 个字段会被瞬时换成另一形态
-  // 已保存的值(热切换),所以两种形态的 BASE_URL / Key / 模型 ID 互不污染。
+  // 顶层「当前生效」上游字段 —— 它们都是 active profile 的实时镜像,只读。
+  // 改这些字段必须走 updateProfile / setActiveProfile,不能用 setField。
+  // 组件 (ControlPanel / submit) 继续读这几个字段,保持向后兼容。
   baseURL: string;
   textModelID: string;
   imageModelID: string;
-  // 上游 API 形态:
-  //   "responses" — 默认,POST /v1/responses + SSE 流式保活(防 CF 524)
+  // 上游 API 形态(active profile 的字段镜像):
+  //   "responses" — POST /v1/responses + SSE 流式保活(防 CF 524)
   //   "images"    — 标准 OpenAI Images API,POST /v1/images/generations + /v1/images/edits
-  apiMode: "responses" | "images";
-  // 关掉 Responses API 的 prompt 改写(在 payload 顶层加 instructions 让模型逐字使用)。
-  // 对 Images API 无效但留着不影响。全局偏好,不分形态。
+  apiMode: APIMode;
+  // 关掉 Responses API 的 prompt 改写(顶层加 instructions 让模型逐字使用)。
+  // 对 Images API 无效但留着不影响。全局偏好,不分 profile。
   noPromptRevision: boolean;
-  // 两种形态各自独立的持久化槽。setField 在改 baseURL/textModelID/imageModelID
-  // 或 setAPIKey 改 apiKey 时,同时写入对应形态的槽 + 顶层镜像。
-  responsesConfig: ModeConfig;
-  imagesConfig: ModeConfig;
+
+  // v0.1.6:多上游配置支持。用户可以保存多个 profile,通过 UpstreamConfigModal
+  // 编辑,通过 ControlPanel 的 dropdown 切。
+  profiles: UpstreamProfile[];
+  // 当前激活的 profile id。若 activeProfileId 不在 profiles 里(被删了 / 数据
+  // 损坏),pickActiveProfile 回退到 lastUsedAt 最大的那条;空列表则为 ""。
+  activeProfileId: string;
   // Multi-reference source images. The legacy single-source UI now feeds into
   // and reads from this list. Empty list + currentImage on the canvas triggers
   // a fallback where the canvas image is used as the implicit source.
@@ -299,11 +357,29 @@ interface StudioState {
 
   // ---- Actions ----
   setField: <K extends keyof StudioState>(key: K, value: StudioState[K]) => void;
+  // 写当前 active profile 的 apiKey 到 keyring(无 active profile 时静默返回)。
   setAPIKey: (v: string) => Promise<void>;
-  saveModeConfig: (mode: APIModeValue, cfg: ModeConfig) => Promise<void>;
   // 一次性清掉错误条幅相关的两个字段(errorMessage + errorRawPath)。
   // 比单独 setField 两次更不容易漏一边。
   clearError: () => void;
+
+  // ---- Profile management (v0.1.6) ----
+  // createProfile:新建一个 profile,自动给它分配 id,并(如果 apiKey 非空)写 keyring。
+  //   返回新建 profile 的 id,UpstreamConfigModal 用它定位刚建的项。
+  createProfile: (input: { name: string; apiMode: APIMode; baseURL?: string;
+    textModelID?: string; imageModelID?: string; concurrencyLimit?: number;
+    apiKey?: string; setActive?: boolean }) => Promise<string>;
+  // updateProfile:就地改一个 profile 的字段。apiKey 若传入,同步写 keyring。
+  //   返回 true 当且仅当 profile 存在并被修改。
+  updateProfile: (id: string, patch: Partial<Omit<UpstreamProfile, "id" | "createdAt">> & { apiKey?: string }) => Promise<boolean>;
+  // deleteProfile:删除 profile,顺手清掉 keyring 项;若被删的是 active,自动
+  //   切到 lastUsedAt 最大的剩余 profile;若列表清空,弹首次配置 modal。
+  deleteProfile: (id: string) => Promise<void>;
+  // duplicateProfile:复制一份 profile,name 末尾追加「副本」,新 id;若源
+  //   profile 有 keyring 项,复制一份到新 id 的 keyring 项。返回新 id。
+  duplicateProfile: (id: string) => Promise<string | null>;
+  // setActiveProfile:把指定 profile 设为 active,同步顶层镜像 + 写 localStorage。
+  setActiveProfile: (id: string) => Promise<void>;
   selectSourceImage: () => Promise<void>;
   removeSource: (index: number) => void;
   clearSources: () => void;
@@ -513,8 +589,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   imageModelID: "",
   apiMode: "responses",
   noPromptRevision: false,
-  responsesConfig: EMPTY_MODE_CFG,
-  imagesConfig: EMPTY_MODE_CFG,
+  profiles: [],
+  activeProfileId: "",
   sources: [],
 
   runningJobs: [],
@@ -568,30 +644,16 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   styleTag: "",
 
   setField: (key, value) => {
-    // apiMode 切换 → 把另一形态已保存的槽热加载到顶层镜像;两形态配置不互相覆盖
-    if (key === "apiMode") {
-      const newMode = value as "responses" | "images";
-      const cfg = newMode === "responses" ? get().responsesConfig : get().imagesConfig;
-      set({
-        apiMode: newMode,
-        baseURL: cfg.baseURL,
-        apiKey: cfg.apiKey,
-        textModelID: cfg.textModelID,
-        imageModelID: cfg.imageModelID,
-      });
-      try { localStorage.setItem("gptcodex.apiMode", newMode); } catch {}
-      return;
-    }
-    // 上游字段:写顶层镜像 + 写当前 mode 的槽
-    if (key === "baseURL" || key === "textModelID" || key === "imageModelID") {
-      const cleaned = key === "baseURL"
-        ? cleanBaseURL(String(value))
-        : String(value);
-      const mode = get().apiMode;
-      const slot = mode === "responses" ? "responsesConfig" : "imagesConfig";
-      const next: ModeConfig = { ...get()[slot], [key]: cleaned };
-      set({ [key]: cleaned, [slot]: next } as any);
-      saveModeField(mode, key as Exclude<keyof ModeConfig, "apiKey">, cleaned);
+    // 上游字段(apiKey / baseURL / textModelID / imageModelID / apiMode)是
+    // active profile 的派生镜像,直接 set 顶层不持久化,改完下次启动就丢。
+    // 这些字段必须走 updateProfile / setActiveProfile 这两个 action。开发期
+    // 抓一下,生产期还是 set 一下顶层让 UI 不爆炸。
+    if (key === "apiMode" || key === "baseURL" || key === "apiKey" ||
+        key === "textModelID" || key === "imageModelID") {
+      if (typeof console !== "undefined") {
+        console.warn(`setField("${String(key)}", ...) 不写持久化;改这个字段请用 updateProfile / setActiveProfile`);
+      }
+      set({ [key]: value } as any);
       return;
     }
     // 其他全局偏好字段
@@ -632,38 +694,152 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   setAPIKey: async (v) => {
     const trimmed = v.trim();
-    const mode = get().apiMode;
-    const slot = mode === "responses" ? "responsesConfig" : "imagesConfig";
-    const next: ModeConfig = { ...get()[slot], apiKey: trimmed };
-    set({ apiKey: trimmed, [slot]: next } as any);
-    await SetStoredAPIKey(mode, trimmed);
+    const activeId = get().activeProfileId;
+    if (!activeId) {
+      // 没有 active profile,设 key 没意义;留个 warning 方便排查。
+      if (typeof console !== "undefined") console.warn("setAPIKey: 没有 active profile,丢弃");
+      return;
+    }
+    // 顶层镜像立即更新,UI 立即响应;keyring 写入异步
+    set({ apiKey: trimmed });
+    await SetStoredAPIKey(keyringUserFor(activeId), trimmed);
   },
 
-  saveModeConfig: async (mode, cfg) => {
-    const normalized: ModeConfig = {
-      baseURL: cleanBaseURL(cfg.baseURL),
-      apiKey: cfg.apiKey.trim(),
-      textModelID: cfg.textModelID.trim(),
-      imageModelID: cfg.imageModelID.trim(),
-      concurrencyLimit: normalizeConcurrencyLimit(cfg.concurrencyLimit),
+  createProfile: async (input) => {
+    const id = genProfileId();
+    const profile: UpstreamProfile = {
+      id,
+      name: input.name.trim() || (input.apiMode === "images" ? "新配置 · Images" : "新配置 · Responses"),
+      apiMode: input.apiMode,
+      baseURL: cleanBaseURL(input.baseURL ?? ""),
+      textModelID: (input.textModelID ?? "").trim(),
+      imageModelID: (input.imageModelID ?? "").trim(),
+      concurrencyLimit: normalizeConcurrencyLimit(input.concurrencyLimit ?? 0),
+      createdAt: Date.now(),
     };
-    const slot = mode === "responses" ? "responsesConfig" : "imagesConfig";
-    set((state) => ({
-      [slot]: normalized,
-      ...(state.apiMode === mode
-        ? {
-            apiKey: normalized.apiKey,
-            baseURL: normalized.baseURL,
-            textModelID: normalized.textModelID,
-            imageModelID: normalized.imageModelID,
-          }
-        : {}),
-    } as Partial<StudioState>));
-    saveModeField(mode, "baseURL", normalized.baseURL);
-    saveModeField(mode, "textModelID", normalized.textModelID);
-    saveModeField(mode, "imageModelID", normalized.imageModelID);
-    saveModeField(mode, "concurrencyLimit", normalized.concurrencyLimit);
-    await SetStoredAPIKey(mode, normalized.apiKey);
+    if ((input.apiKey ?? "").trim()) {
+      try { await SetStoredAPIKey(keyringUserFor(id), input.apiKey!.trim()); }
+      catch (e: any) {
+        if (typeof console !== "undefined") console.error("写 keyring 失败", e);
+      }
+    }
+    const next = [...get().profiles, profile];
+    persistProfiles(next);
+    set({ profiles: next });
+    if (input.setActive ?? true) {
+      await get().setActiveProfile(id);
+    }
+    return id;
+  },
+
+  updateProfile: async (id, patch) => {
+    const list = get().profiles;
+    const i = list.findIndex((p) => p.id === id);
+    if (i < 0) return false;
+    const cur = list[i];
+    const next: UpstreamProfile = {
+      ...cur,
+      name: patch.name !== undefined ? patch.name.trim() : cur.name,
+      apiMode: patch.apiMode ?? cur.apiMode,
+      baseURL: patch.baseURL !== undefined ? cleanBaseURL(patch.baseURL) : cur.baseURL,
+      textModelID: patch.textModelID !== undefined ? patch.textModelID.trim() : cur.textModelID,
+      imageModelID: patch.imageModelID !== undefined ? patch.imageModelID.trim() : cur.imageModelID,
+      concurrencyLimit: patch.concurrencyLimit !== undefined
+        ? normalizeConcurrencyLimit(patch.concurrencyLimit) : cur.concurrencyLimit,
+      lastUsedAt: patch.lastUsedAt ?? cur.lastUsedAt,
+    };
+    const nextList = list.map((p, idx) => (idx === i ? next : p));
+    persistProfiles(nextList);
+    set({ profiles: nextList });
+    if (patch.apiKey !== undefined) {
+      try { await SetStoredAPIKey(keyringUserFor(id), patch.apiKey); }
+      catch (e: any) {
+        if (typeof console !== "undefined") console.error("写 keyring 失败", e);
+      }
+    }
+    // 如果改的就是 active profile,镜像同步刷一遍
+    if (id === get().activeProfileId) {
+      const apiKey = patch.apiKey !== undefined ? patch.apiKey.trim() : get().apiKey;
+      set({
+        apiMode: next.apiMode,
+        baseURL: next.baseURL,
+        textModelID: next.textModelID,
+        imageModelID: next.imageModelID,
+        apiKey,
+      });
+    }
+    return true;
+  },
+
+  deleteProfile: async (id) => {
+    const list = get().profiles;
+    const idx = list.findIndex((p) => p.id === id);
+    if (idx < 0) return;
+    const nextList = list.filter((_, i) => i !== idx);
+    persistProfiles(nextList);
+    // 顺手清 keyring,留着只会是孤儿项
+    try { await DeleteStoredAPIKey(keyringUserFor(id)); }
+    catch (e: any) {
+      if (typeof console !== "undefined") console.warn("删 keyring 项失败(继续)", e);
+    }
+    set({ profiles: nextList });
+    // 如果删的是 active,自动切到 lastUsedAt 最大的;空列表 → 弹首次配置
+    if (get().activeProfileId === id) {
+      const fallback = pickActiveProfile(nextList, "");
+      if (fallback) {
+        await get().setActiveProfile(fallback.id);
+      } else {
+        persistActiveProfileId("");
+        set({
+          profiles: nextList,
+          activeProfileId: "",
+          apiKey: "",
+          baseURL: "",
+          textModelID: "",
+          imageModelID: "",
+          apiMode: "responses",
+          upstreamModalOpen: true,
+        });
+      }
+    }
+  },
+
+  duplicateProfile: async (id) => {
+    const cur = get().profiles.find((p) => p.id === id);
+    if (!cur) return null;
+    const cloned = cloneProfile(cur);
+    // 把 keyring 里的 apiKey 也复制一份(避免新 profile 还得用户手动重填 key)
+    try {
+      const existingKey = await GetStoredAPIKey(keyringUserFor(id)).catch(() => "");
+      if (existingKey) {
+        await SetStoredAPIKey(keyringUserFor(cloned.id), existingKey);
+      }
+    } catch { /* keyring 异常不阻塞复制 */ }
+    const next = [...get().profiles, cloned];
+    persistProfiles(next);
+    set({ profiles: next });
+    return cloned.id;
+  },
+
+  setActiveProfile: async (id) => {
+    const profile = get().profiles.find((p) => p.id === id);
+    if (!profile) return;
+    persistActiveProfileId(id);
+    // 镜像顶层字段
+    const apiKey = await GetStoredAPIKey(keyringUserFor(id)).catch(() => "");
+    // 更新 lastUsedAt 不写 keyring(只是元数据)
+    const refreshed: UpstreamProfile = { ...profile, lastUsedAt: Date.now() };
+    const nextProfiles = get().profiles.map((p) => p.id === id ? refreshed : p);
+    persistProfiles(nextProfiles);
+    set({
+      profiles: nextProfiles,
+      activeProfileId: id,
+      apiMode: profile.apiMode,
+      baseURL: profile.baseURL,
+      textModelID: profile.textModelID,
+      imageModelID: profile.imageModelID,
+      apiKey,
+    });
   },
 
   clearError: () => {
@@ -736,8 +912,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       return;
     }
     const batchCount = normalizeBatchCount(s.batchCount);
-    const activeConfig = s.apiMode === "responses" ? s.responsesConfig : s.imagesConfig;
-    const concurrencyLimit = normalizeConcurrencyLimit(activeConfig.concurrencyLimit);
+    const activeProfile = s.profiles.find((p) => p.id === s.activeProfileId);
+    const concurrencyLimit = normalizeConcurrencyLimit(activeProfile?.concurrencyLimit ?? 0);
     if (concurrencyLimit > 0) {
       const activeCount = workspaceRunningCount(s, s.apiMode);
       const available = concurrencyLimit - activeCount;
@@ -972,13 +1148,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const n = Number(raw);
       if (!Number.isNaN(n) && n > 0.5 && n < 2) fontScale = n;
     } catch {}
-    // API 形态 + 网络通道(全局)
-    let apiMode: "responses" | "images" = "responses";
+    // 网络通道(全局)
     let transport: TransportKind = "auto";
-    try {
-      const v = localStorage.getItem("gptcodex.apiMode");
-      if (v === "images" || v === "responses") apiMode = v;
-    } catch {}
     try {
       const v = localStorage.getItem("gptcodex.transport");
       if (v === "auto" || v === "native" || v === "curl") transport = v;
@@ -992,54 +1163,104 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const v = localStorage.getItem("gptcodex.outputFormat");
       if (v === "png" || v === "jpeg" || v === "webp") outputFormat = v;
     } catch {}
-    // 每个形态的独立上游槽
-    let responsesConfig = loadModeConfig("responses");
-    let imagesConfig = loadModeConfig("images");
-    // 旧版本(共享单份配置)迁移: legacy 字段 → 当前形态的槽,只在该槽为空时迁入。
-    const legacyBaseURL  = (() => { try { return localStorage.getItem("gptcodex.baseURL") ?? ""; } catch { return ""; } })();
-    const legacyTextID   = (() => { try { return localStorage.getItem("gptcodex.textModelID") ?? ""; } catch { return ""; } })();
-    const legacyImageID  = (() => { try { return localStorage.getItem("gptcodex.imageModelID") ?? ""; } catch { return ""; } })();
-    const legacySharedKey = loadLegacySharedAPIKey();
-    const legacyResponsesKey = loadLegacyModeAPIKey("responses") || (apiMode === "responses" ? legacySharedKey : "");
-    const legacyImagesKey = loadLegacyModeAPIKey("images") || (apiMode === "images" ? legacySharedKey : "");
-    const activeSlot = apiMode === "responses" ? responsesConfig : imagesConfig;
-    let migrated = false;
-    if (!activeSlot.baseURL && legacyBaseURL)     { activeSlot.baseURL = cleanBaseURL(legacyBaseURL); migrated = true; }
-    if (!activeSlot.textModelID && legacyTextID)  { activeSlot.textModelID = legacyTextID; migrated = true; }
-    if (!activeSlot.imageModelID && legacyImageID){ activeSlot.imageModelID = legacyImageID; migrated = true; }
-    if (migrated) {
-      saveModeField(apiMode, "baseURL", activeSlot.baseURL);
-      saveModeField(apiMode, "textModelID", activeSlot.textModelID);
-      saveModeField(apiMode, "imageModelID", activeSlot.imageModelID);
-      if (apiMode === "responses") responsesConfig = activeSlot;
-      else imagesConfig = activeSlot;
-    }
-    let responsesKey = await GetStoredAPIKey("responses").catch(() => "");
-    let imagesKey = await GetStoredAPIKey("images").catch(() => "");
-    let clearedLegacy = false;
-    if (!responsesKey && legacyResponsesKey) {
+
+    // ---- v0.1.6 profile 列表加载 / 迁移 -----------------------------------
+    // 1) 优先读新格式 gptcodex.profiles。
+    // 2) 缺失时尝试从老 gptcodex.{responses,images}.* + 老 keyring 项合成 0-2
+    //    个 profile,顺手清理老 localStorage 键。
+    let profiles = loadStoredProfiles();
+    let activeProfileId = loadStoredActiveProfileId();
+    if (profiles.length === 0) {
+      // 检测老格式
+      let legacyApiMode: APIMode = "responses";
       try {
-        await SetStoredAPIKey("responses", legacyResponsesKey);
-        responsesKey = legacyResponsesKey;
-        clearedLegacy = true;
+        const v = localStorage.getItem("gptcodex.apiMode");
+        if (v === "images" || v === "responses") legacyApiMode = v;
       } catch {}
+      const legacyResponses = loadModeConfig("responses");
+      const legacyImages = loadModeConfig("images");
+      // 沿用 v0.1.5 那套 legacy-shared 字段(更老的 gptcodex.baseURL 等)
+      const legacyBaseURL  = (() => { try { return localStorage.getItem("gptcodex.baseURL") ?? ""; } catch { return ""; } })();
+      const legacyTextID   = (() => { try { return localStorage.getItem("gptcodex.textModelID") ?? ""; } catch { return ""; } })();
+      const legacyImageID  = (() => { try { return localStorage.getItem("gptcodex.imageModelID") ?? ""; } catch { return ""; } })();
+      if (legacyApiMode === "responses" && legacyBaseURL && !legacyResponses.baseURL) {
+        legacyResponses.baseURL = cleanBaseURL(legacyBaseURL);
+        legacyResponses.textModelID = legacyTextID;
+        legacyResponses.imageModelID = legacyImageID;
+      } else if (legacyApiMode === "images" && legacyBaseURL && !legacyImages.baseURL) {
+        legacyImages.baseURL = cleanBaseURL(legacyBaseURL);
+        legacyImages.imageModelID = legacyImageID;
+      }
+      const legacySharedKey = loadLegacySharedAPIKey();
+      const legacyResponsesKey = await GetStoredAPIKey("responses").catch(() => "")
+        || loadLegacyModeAPIKey("responses")
+        || (legacyApiMode === "responses" ? legacySharedKey : "");
+      const legacyImagesKey = await GetStoredAPIKey("images").catch(() => "")
+        || loadLegacyModeAPIKey("images")
+        || (legacyApiMode === "images" ? legacySharedKey : "");
+      const synth: UpstreamProfile[] = [];
+      if (legacyResponses.baseURL || legacyResponsesKey) {
+        const id = genProfileId();
+        synth.push({
+          id,
+          name: "Responses · 默认",
+          apiMode: "responses",
+          baseURL: legacyResponses.baseURL,
+          textModelID: legacyResponses.textModelID,
+          imageModelID: legacyResponses.imageModelID,
+          concurrencyLimit: normalizeConcurrencyLimit(legacyResponses.concurrencyLimit),
+          createdAt: Date.now(),
+          lastUsedAt: legacyApiMode === "responses" ? Date.now() : undefined,
+        });
+        if (legacyResponsesKey) {
+          try { await SetStoredAPIKey(keyringUserFor(id), legacyResponsesKey); } catch {}
+        }
+      }
+      if (legacyImages.baseURL || legacyImagesKey) {
+        const id = genProfileId();
+        synth.push({
+          id,
+          name: "Images · 默认",
+          apiMode: "images",
+          baseURL: legacyImages.baseURL,
+          textModelID: legacyImages.textModelID,
+          imageModelID: legacyImages.imageModelID,
+          concurrencyLimit: normalizeConcurrencyLimit(legacyImages.concurrencyLimit),
+          createdAt: Date.now(),
+          lastUsedAt: legacyApiMode === "images" ? Date.now() : undefined,
+        });
+        if (legacyImagesKey) {
+          try { await SetStoredAPIKey(keyringUserFor(id), legacyImagesKey); } catch {}
+        }
+      }
+      if (synth.length > 0) {
+        profiles = synth;
+        // active = 跟老 apiMode 对应的那个
+        const matching = synth.find((p) => p.apiMode === legacyApiMode);
+        activeProfileId = (matching ?? synth[0]).id;
+        persistProfiles(profiles);
+        persistActiveProfileId(activeProfileId);
+        // 清掉老的 keyring 项 + localStorage 键(避免下次启动重复迁移)
+        try { await DeleteStoredAPIKey("responses"); } catch {}
+        try { await DeleteStoredAPIKey("images"); } catch {}
+        clearLegacyAPIKeys();
+        clearLegacyModeLocalStorage();
+      }
     }
-    if (!imagesKey && legacyImagesKey) {
-      try {
-        await SetStoredAPIKey("images", legacyImagesKey);
-        imagesKey = legacyImagesKey;
-        clearedLegacy = true;
-      } catch {}
+
+    // 决定 active profile 与对应顶层镜像。空列表 → 全置空,后面会自动弹首次配置。
+    const activeProfile = pickActiveProfile(profiles, activeProfileId);
+    if (activeProfile && activeProfile.id !== activeProfileId) {
+      activeProfileId = activeProfile.id;
+      persistActiveProfileId(activeProfileId);
     }
-    if (clearedLegacy) clearLegacyAPIKeys();
-    responsesConfig = { ...responsesConfig, apiKey: responsesKey || legacyResponsesKey };
-    imagesConfig = { ...imagesConfig, apiKey: imagesKey || legacyImagesKey };
-    const activeConfig = apiMode === "responses" ? responsesConfig : imagesConfig;
-    // 顶层镜像 = 当前形态的槽
-    const baseURL = activeConfig.baseURL;
-    const textModelID = activeConfig.textModelID;
-    const imageModelID = activeConfig.imageModelID;
-    const activeKey = activeConfig.apiKey;
+    const apiMode: APIMode = activeProfile?.apiMode ?? "responses";
+    const baseURL = activeProfile?.baseURL ?? "";
+    const textModelID = activeProfile?.textModelID ?? "";
+    const imageModelID = activeProfile?.imageModelID ?? "";
+    const activeKey = activeProfile
+      ? await GetStoredAPIKey(keyringUserFor(activeProfile.id)).catch(() => "")
+      : "";
     // Apply theme + font scale to root immediately.
     applyTheme(theme);
     document.documentElement.style.setProperty("--font-scale", String(fontScale));
@@ -1086,11 +1307,12 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       apiKey: activeKey, history: trimHistory(items), promptHistory, presets, theme, fontScale,
       apiMode, baseURL, textModelID, imageModelID, transport, noPromptRevision,
       outputFormat,
-      responsesConfig, imagesConfig,
+      profiles,
+      activeProfileId,
       workspaces: [initialWorkspace],
       activeWorkspaceId: wsId,
-      // 首次启动:当前形态的 apiKey 或 baseURL 任一缺失 → 自动弹上游配置。
-      upstreamModalOpen: !activeKey.trim() || !baseURL.trim(),
+      // 没 active profile 或 active profile 缺 key/baseURL → 弹首次配置。
+      upstreamModalOpen: !activeProfile || !activeKey.trim() || !baseURL.trim(),
     });
   },
 
@@ -1452,18 +1674,23 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   optimizePrompt: async () => {
     const s = get();
     if (s.isRunning || s.isOptimizingPrompt) return;
-    const hasDedicatedOptimizeConfig = !!(s.responsesConfig.apiKey.trim() && s.responsesConfig.baseURL.trim());
-    const optimizeConfig = hasDedicatedOptimizeConfig
-      ? s.responsesConfig
-      : {
-          apiKey: s.apiKey,
-          baseURL: s.baseURL,
-          textModelID: s.textModelID,
-          imageModelID: s.imageModelID,
-        };
-    const optimizeAPIKey = optimizeConfig.apiKey.trim();
-    const optimizeBaseURL = cleanBaseURL(optimizeConfig.baseURL);
-    const optimizeTextModelID = optimizeConfig.textModelID.trim();
+    // prompt 优化必须走 Responses(它要文本模型),如果用户 active 的是 Images
+    // profile,要回头找一个 Responses profile 来跑;它的 key 还是从 keyring 拿。
+    let optimizeAPIKey = s.apiKey;
+    let optimizeBaseURL = s.baseURL;
+    let optimizeTextModelID = s.textModelID;
+    if (s.apiMode !== "responses") {
+      const responsesProfile = s.profiles.find((p) => p.apiMode === "responses" && p.baseURL);
+      if (responsesProfile) {
+        optimizeBaseURL = responsesProfile.baseURL;
+        optimizeTextModelID = responsesProfile.textModelID;
+        const k = await GetStoredAPIKey(keyringUserFor(responsesProfile.id)).catch(() => "");
+        if (k) optimizeAPIKey = k;
+      }
+    }
+    optimizeAPIKey = optimizeAPIKey.trim();
+    optimizeBaseURL = cleanBaseURL(optimizeBaseURL);
+    optimizeTextModelID = optimizeTextModelID.trim();
     if (!optimizeAPIKey) {
       s.pushToast("先填入 API Key", "warn");
       return;

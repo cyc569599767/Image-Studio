@@ -28,7 +28,8 @@ export function HistoryRail() {
     history, currentImage, reuseAsSource, deleteHistoryItem, setField,
     compareB, setCompareB, pushToast, fullscreen,
     applyHistoryParams, regenerateFromHistory,
-    openResultDetail, apiKey, baseURL, apiMode, responsesConfig, imagesConfig,
+    openResultDetail, apiKey, baseURL, apiMode,
+    profiles, activeProfileId, setActiveProfile,
     openUpstreamConfig, testAPIKey, isTestingKey,
   } = useStudioStore();
 
@@ -122,29 +123,36 @@ export function HistoryRail() {
           </button>
         </div>
 
-        <div className={`platform-seg mt-3 flex gap-1 bg-black/[0.04] p-0.5 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:ring-white/[0.06] ${isWindows ? "rounded-[10px]" : "rounded-full"}`}>
-          {(["responses", "images"] as const).map((m) => {
-            const cfg = m === "responses" ? responsesConfig : imagesConfig;
-            const ready = cfg.apiKey.trim() && cfg.baseURL.trim();
-            const active = apiMode === m;
-            const limit = cfg.concurrencyLimit > 0 ? ` · 并发 ${cfg.concurrencyLimit}` : " · 并发不限制";
-            return (
-              <button
-                key={m}
-                onClick={() => setField("apiMode", m)}
-                title={ready ? `${m} · 已配置${limit} · ${cfg.baseURL.replace(/^https?:\/\//, "")}` : `${m} · 未配置${limit}`}
-                className={`platform-chip flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                  active
-                    ? "active bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
-                } ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
-              >
-                {m === "responses" ? "Responses" : "Images"}
-                <span className={`h-1.5 w-1.5 rounded-full ${ready ? "bg-[var(--accent)]" : "bg-zinc-400 dark:bg-zinc-600"}`} />
-              </button>
-            );
-          })}
-        </div>
+        {/* v0.1.6: profile dropdown 替换原来的 [Responses | Images] 二选一 chip。
+            列表为空时 dropdown 隐藏,提示用户去「上游配置」建第一条。 */}
+        {profiles.length > 0 ? (
+          <div className="mt-3">
+            <select
+              value={activeProfileId}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (id === "__manage__") {
+                  openUpstreamConfig();
+                  return;
+                }
+                if (id) void setActiveProfile(id);
+              }}
+              className={`focus-ring w-full border border-black/[0.08] bg-[var(--surface)] px-3 py-1.5 text-[11px] font-medium text-zinc-800 dark:border-white/[0.08] dark:text-zinc-100 ${isWindows ? "rounded-[8px]" : "rounded-full"}`}
+              title="切换上游配置 / 管理"
+            >
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {p.apiMode === "responses" ? "Responses" : "Images"}
+                </option>
+              ))}
+              <option value="__manage__">⚙ 管理配置...</option>
+            </select>
+          </div>
+        ) : (
+          <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">
+            还没有上游配置,点下方「上游配置」建一条。
+          </p>
+        )}
 
         <div className="mt-2 flex gap-1.5">
           <button

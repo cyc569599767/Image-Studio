@@ -8,6 +8,8 @@ export function ChooseOutputDir():Promise<string>;
 
 export function CropImage(arg1:string,arg2:number,arg3:number,arg4:number,arg5:number):Promise<backend.ImageTransformResult>;
 
+export function DeleteStoredAPIKey(arg1:string):Promise<void>;
+
 export function Edit(arg1:backend.GenerateOptions):Promise<backend.JobStarted>;
 
 export function ExportHistoryToFile(arg1:string):Promise<string>;

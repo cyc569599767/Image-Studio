@@ -14,6 +14,10 @@ export function CropImage(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['backend']['Service']['CropImage'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function DeleteStoredAPIKey(arg1) {
+  return window['go']['backend']['Service']['DeleteStoredAPIKey'](arg1);
+}
+
 export function Edit(arg1) {
   return window['go']['backend']['Service']['Edit'](arg1);
 }
