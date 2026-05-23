@@ -98,6 +98,13 @@ export interface Workspace {
   // We store currentImageId rather than the full HistoryItem so we don't
   // duplicate large base64 blobs. The history list is shared across tabs.
   currentImageId: string | null;
+  runningJobIds: string[];
+  jobsTotal: number;
+  jobsCompleted: number;
+  progress: ProgressInfo | null;
+  lastLogLine: string;
+  errorMessage: string | null;
+  lastPayload?: import("../../wailsjs/go/models").backend.GenerateOptions | null;
 }
 
 export interface Preset {

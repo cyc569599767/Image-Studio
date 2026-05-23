@@ -55,7 +55,15 @@ export function WorkspaceBar() {
                 }}
               />
             ) : (
-              <span className="max-w-[132px] truncate">{w.name}</span>
+              <>
+                <span className="max-w-[132px] truncate">{w.name}</span>
+                {w.runningJobIds.length > 0 && (
+                  <span
+                    title={`运行中 ${w.runningJobIds.length}`}
+                    className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_6px_rgb(0_122_255_/_0.55)]"
+                  />
+                )}
+              </>
             )}
             {!isEditing && (
               <button

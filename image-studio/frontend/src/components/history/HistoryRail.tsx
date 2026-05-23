@@ -127,11 +127,12 @@ export function HistoryRail() {
             const cfg = m === "responses" ? responsesConfig : imagesConfig;
             const ready = cfg.apiKey.trim() && cfg.baseURL.trim();
             const active = apiMode === m;
+            const limit = cfg.concurrencyLimit > 0 ? ` · 并发 ${cfg.concurrencyLimit}` : " · 并发不限制";
             return (
               <button
                 key={m}
                 onClick={() => setField("apiMode", m)}
-                title={ready ? `${m} · 已配置 · ${cfg.baseURL.replace(/^https?:\/\//, "")}` : `${m} · 未配置`}
+                title={ready ? `${m} · 已配置${limit} · ${cfg.baseURL.replace(/^https?:\/\//, "")}` : `${m} · 未配置${limit}`}
                 className={`platform-chip flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium transition-colors ${
                   active
                     ? "active bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100"

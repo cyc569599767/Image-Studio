@@ -16,6 +16,7 @@
     "build:linux": "node ./scripts/platform-vite.mjs build linux",
     "build:android": "node ./scripts/platform-vite.mjs build android",
     "build:android-pad": "node ./scripts/platform-vite.mjs build android-pad",
+    "test": "node --test ./test/workspaceRuntime.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -34,6 +34,8 @@ type GenerateOptions struct {
 	APIMode        string `json:"apiMode"`        // "responses" (default) | "images"
 	// NoPromptRevision:true 时禁止 Responses API 文本模型改写 prompt;Images API 路径忽略。
 	NoPromptRevision bool `json:"noPromptRevision"`
+	// ConcurrencyLimit is enforced per APIMode. 0 means unlimited.
+	ConcurrencyLimit int `json:"concurrencyLimit"`
 }
 
 // PromptOptimizeOptions is the request shape for one-click prompt revision.

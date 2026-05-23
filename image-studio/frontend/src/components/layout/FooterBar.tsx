@@ -8,8 +8,11 @@ const ISSUES_URL = "https://github.com/RoseKhlifa/Image-Studio/issues";
 const VERSION = "0.1.4";
 
 export function FooterBar() {
-  const { fullscreen, history, runningJobs, isRunning, pushToast } = useStudioStore();
+  const { fullscreen, history, runningJobs, isRunning, workspaces, pushToast } = useStudioStore();
   if (fullscreen) return null;
+  const totalRunning = workspaces.reduce((sum, w) => sum + (w.runningJobIds?.length ?? 0), 0);
+  const activeRunning = isRunning;
+  const anyRunning = activeRunning || totalRunning > 0;
 
   // 今日已生图 = 本地日历当天 00:00 起的条目数,不是「最近 24h」滚动窗口。
   const todayStart = new Date();
@@ -43,21 +46,21 @@ export function FooterBar() {
           <span className="opacity-70">总生图:</span>
           <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{history.length}</span>
         </span>
-        {isRunning && (
+        {anyRunning && (
           <>
             <span className="opacity-40">·</span>
             <span className="flex items-baseline gap-1">
-            <span className="opacity-70">并发</span>
-              <span className="font-medium text-[var(--accent)] tabular-nums">{runningJobs.length}</span>
+              <span className="opacity-70">{activeRunning ? "当前标签" : "后台运行"}</span>
+              <span className="font-medium text-[var(--accent)] tabular-nums">{activeRunning ? runningJobs.length : totalRunning}</span>
             </span>
           </>
         )}
       </div>
       <div className="flex items-center gap-2">
-        <span>{isRunning ? "运行中" : "就绪"}</span>
+        <span>{activeRunning ? "运行中" : anyRunning ? "后台运行中" : "就绪"}</span>
         <span
           className={`h-1.5 w-1.5 rounded-full ${
-            isRunning
+            anyRunning
               ? "bg-[var(--accent)] shadow-[0_0_6px_rgb(0_122_255_/_0.6)] animate-pulse"
               : "bg-zinc-400 dark:bg-zinc-600"
           }`}

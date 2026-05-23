@@ -34,23 +34,26 @@ import (
 type Service struct {
 	ctx context.Context
 
-	mu        sync.Mutex
-	jobs      map[string]*job
-	outputDir string // 用户自定义输出目录;空时回退到 defaultOutputDir()
-	apiKeys   apiKeyStore
+	mu               sync.Mutex
+	jobs             map[string]*job
+	runningByAPIMode map[string]int
+	outputDir        string // 用户自定义输出目录;空时回退到 defaultOutputDir()
+	apiKeys          apiKeyStore
 
 	trustedOutputRoots map[string]struct{}
 }
 
 type job struct {
-	cancel context.CancelFunc
-	done   chan struct{}
+	cancel  context.CancelFunc
+	done    chan struct{}
+	apiMode string
 }
 
 // NewService constructs a fresh Service ready to be passed to wails.Run Bind.
 func NewService() *Service {
 	return &Service{
 		jobs:               map[string]*job{},
+		runningByAPIMode:   map[string]int{},
 		apiKeys:            keyringAPIKeyStore{},
 		trustedOutputRoots: map[string]struct{}{},
 	}
@@ -209,17 +212,26 @@ func (s *Service) startJob(opts GenerateOptions) (JobStarted, error) {
 	if strings.TrimSpace(opts.Prompt) == "" {
 		return JobStarted{}, errors.New("提示词/修改要求不能为空")
 	}
+	apiMode := normaliseAPIMode(opts.APIMode)
+	limit := normaliseConcurrencyLimit(opts.ConcurrencyLimit)
+	if s.ctx == nil {
+		return JobStarted{}, errors.New("服务未启动")
+	}
 
 	jobID, err := newJobID()
 	if err != nil {
 		return JobStarted{}, err
 	}
 
+	s.mu.Lock()
+	if !s.canStartJobLocked(apiMode, limit) {
+		s.mu.Unlock()
+		return JobStarted{}, fmt.Errorf("%s 已达到并发限制 %d,请等待当前任务完成后再提交", apiModeLabel(apiMode), limit)
+	}
 	ctx, cancel := context.WithCancel(s.ctx)
 	done := make(chan struct{})
-
-	s.mu.Lock()
-	s.jobs[jobID] = &job{cancel: cancel, done: done}
+	s.jobs[jobID] = &job{cancel: cancel, done: done, apiMode: apiMode}
+	s.runningByAPIMode[apiMode]++
 	s.mu.Unlock()
 
 	go s.runJob(ctx, jobID, opts, done)
@@ -227,11 +239,20 @@ func (s *Service) startJob(opts GenerateOptions) (JobStarted, error) {
 	return JobStarted{JobID: jobID}, nil
 }
 
+func (s *Service) canStartJobLocked(apiMode string, limit int) bool {
+	return limit <= 0 || s.runningByAPIMode[apiMode] < limit
+}
+
 func (s *Service) runJob(ctx context.Context, jobID string, opts GenerateOptions, done chan struct{}) {
 	defer close(done)
 	defer func() {
 		s.mu.Lock()
-		delete(s.jobs, jobID)
+		if j, ok := s.jobs[jobID]; ok {
+			if s.runningByAPIMode[j.apiMode] > 0 {
+				s.runningByAPIMode[j.apiMode]--
+			}
+			delete(s.jobs, jobID)
+		}
 		s.mu.Unlock()
 	}()
 
@@ -348,6 +369,29 @@ func (s *Service) runJob(ctx context.Context, jobID string, opts GenerateOptions
 
 func (s *Service) emitError(jobID string, err error) {
 	runtime.EventsEmit(s.ctx, "error:"+jobID, ErrorPayload{Message: err.Error()})
+}
+
+func normaliseAPIMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case string(client.APIModeImages):
+		return string(client.APIModeImages)
+	default:
+		return string(client.APIModeResponses)
+	}
+}
+
+func normaliseConcurrencyLimit(limit int) int {
+	if limit < 0 {
+		return 0
+	}
+	return limit
+}
+
+func apiModeLabel(mode string) string {
+	if mode == string(client.APIModeImages) {
+		return "Images API"
+	}
+	return "Responses API"
 }
 
 func newJobID() (string, error) {

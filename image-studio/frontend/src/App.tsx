@@ -75,7 +75,7 @@ function App() {
       // Primary-modifier + Enter: submit. Works inside the prompt textarea too.
       if (k === "enter") {
         e.preventDefault();
-        if (!st.isRunning) st.submit();
+        st.submit();
         return;
       }
       // The rest only fire when NOT typing in a field.

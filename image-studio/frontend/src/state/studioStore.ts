@@ -64,6 +64,17 @@ import {
 } from "../lib/security";
 import { base64ToBlob, blobToBase64, createPreviewBlob, getImageDimensionsFromBase64 } from "../lib/images";
 import { isWindows } from "../lib/platform";
+import {
+  activeRuntimePatch,
+  apiModeLabel,
+  normalizeConcurrencyLimit,
+  patchWorkspaceRuntime,
+  workspaceRuntimeFromState,
+  workspaceRunningCount,
+  type APIModeValue,
+  type RunningJobMeta,
+  type WorkspacePatch,
+} from "./workspaceRuntime";
 
 // 单个 API 形态的上游 5 字段(去掉 apiMode 本身)。
 // 其中 apiKey 只进后端凭据存储;其余字段走 localStorage。
@@ -72,6 +83,9 @@ export interface ModeConfig {
   apiKey: string;
   textModelID: string;
   imageModelID: string;
+  // 0 = unlimited. Positive values cap concurrently running jobs for this
+  // upstream API shape across all tabs.
+  concurrencyLimit: number;
 }
 
 export interface PromptOptimizeRequest {
@@ -84,7 +98,7 @@ export interface PromptOptimizeRequest {
   imagePath: string;
 }
 
-const EMPTY_MODE_CFG: ModeConfig = { baseURL: "", apiKey: "", textModelID: "", imageModelID: "" };
+const EMPTY_MODE_CFG: ModeConfig = { baseURL: "", apiKey: "", textModelID: "", imageModelID: "", concurrencyLimit: 0 };
 const MAX_HISTORY_ITEMS = 120;
 let detachSystemThemeListener: (() => void) | null = null;
 
@@ -137,19 +151,29 @@ function applyTheme(theme: ThemeMode) {
 }
 
 function loadModeConfig(mode: "responses" | "images"): ModeConfig {
-  const r = (k: Exclude<keyof ModeConfig, "apiKey">): string => {
+  const r = (k: Exclude<keyof ModeConfig, "apiKey" | "concurrencyLimit">): string => {
     try { return localStorage.getItem(`gptcodex.${mode}.${k}`) ?? ""; } catch { return ""; }
   };
+  const limit = (() => {
+    try {
+      const raw = localStorage.getItem(`gptcodex.${mode}.concurrencyLimit`) ?? "";
+      const n = Number(raw);
+      return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    } catch {
+      return 0;
+    }
+  })();
   return {
     baseURL: r("baseURL"),
     apiKey: "",
     textModelID: r("textModelID"),
     imageModelID: r("imageModelID"),
+    concurrencyLimit: limit,
   };
 }
 
-function saveModeField(mode: "responses" | "images", field: Exclude<keyof ModeConfig, "apiKey">, value: string) {
-  try { localStorage.setItem(`gptcodex.${mode}.${field}`, value); } catch {}
+function saveModeField(mode: "responses" | "images", field: Exclude<keyof ModeConfig, "apiKey">, value: string | number) {
+  try { localStorage.setItem(`gptcodex.${mode}.${field}`, String(value)); } catch {}
 }
 
 interface StudioState {
@@ -189,6 +213,7 @@ interface StudioState {
 
   // ---- Runtime ----
   // List of concurrently running job IDs (batch parallel). Empty when idle.
+  // Active-workspace scoped mirror for the currently selected tab.
   runningJobs: string[];
   // Total jobs in current batch, completed so far. Used by StatusBar.
   jobsTotal: number;
@@ -200,6 +225,9 @@ interface StudioState {
   // Snapshot of the last successfully-built payload, used by the retry button
   // on the error banner. Null when there's nothing to retry.
   lastPayload: backend.GenerateOptions | null;
+  // Global registry used to route progress/results back to their originating
+  // workspace and to enforce upstream concurrency limits.
+  runningJobMeta: Record<string, RunningJobMeta>;
 
   // ---- Result + history ----
   currentImage: HistoryItem | null;
@@ -264,6 +292,7 @@ interface StudioState {
   // ---- Actions ----
   setField: <K extends keyof StudioState>(key: K, value: StudioState[K]) => void;
   setAPIKey: (v: string) => Promise<void>;
+  saveModeConfig: (mode: APIModeValue, cfg: ModeConfig) => Promise<void>;
   selectSourceImage: () => Promise<void>;
   removeSource: (index: number) => void;
   clearSources: () => void;
@@ -472,6 +501,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   errorMessage: null,
   isRunning: false,
   lastPayload: null,
+  runningJobMeta: {},
 
   currentImage: null,
   history: [],
@@ -525,9 +555,11 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       try { localStorage.setItem("gptcodex.apiMode", newMode); } catch {}
       return;
     }
-    // 上游 4 字段:写顶层镜像 + 写当前 mode 的槽
+    // 上游字段:写顶层镜像 + 写当前 mode 的槽
     if (key === "baseURL" || key === "textModelID" || key === "imageModelID") {
-      const cleaned = key === "baseURL" ? cleanBaseURL(String(value)) : String(value);
+      const cleaned = key === "baseURL"
+        ? cleanBaseURL(String(value))
+        : String(value);
       const mode = get().apiMode;
       const slot = mode === "responses" ? "responsesConfig" : "imagesConfig";
       const next: ModeConfig = { ...get()[slot], [key]: cleaned };
@@ -537,6 +569,11 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     }
     // 其他全局偏好字段
     set({ [key]: value } as any);
+    if (key === "errorMessage") {
+      set({ workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, { errorMessage: value as string | null }) });
+    } else if (key === "lastPayload") {
+      set({ workspaces: patchWorkspaceRuntime(get().workspaces, get().activeWorkspaceId, { lastPayload: value as backend.GenerateOptions | null }) });
+    }
     if (key === "transport") {
       try { localStorage.setItem("gptcodex.transport", String(value)); } catch {}
     } else if (key === "noPromptRevision") {
@@ -553,6 +590,33 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const next: ModeConfig = { ...get()[slot], apiKey: trimmed };
     set({ apiKey: trimmed, [slot]: next } as any);
     await SetStoredAPIKey(mode, trimmed);
+  },
+
+  saveModeConfig: async (mode, cfg) => {
+    const normalized: ModeConfig = {
+      baseURL: cleanBaseURL(cfg.baseURL),
+      apiKey: cfg.apiKey.trim(),
+      textModelID: cfg.textModelID.trim(),
+      imageModelID: cfg.imageModelID.trim(),
+      concurrencyLimit: normalizeConcurrencyLimit(cfg.concurrencyLimit),
+    };
+    const slot = mode === "responses" ? "responsesConfig" : "imagesConfig";
+    set((state) => ({
+      [slot]: normalized,
+      ...(state.apiMode === mode
+        ? {
+            apiKey: normalized.apiKey,
+            baseURL: normalized.baseURL,
+            textModelID: normalized.textModelID,
+            imageModelID: normalized.imageModelID,
+          }
+        : {}),
+    } as Partial<StudioState>));
+    saveModeField(mode, "baseURL", normalized.baseURL);
+    saveModeField(mode, "textModelID", normalized.textModelID);
+    saveModeField(mode, "imageModelID", normalized.imageModelID);
+    saveModeField(mode, "concurrencyLimit", normalized.concurrencyLimit);
+    await SetStoredAPIKey(mode, normalized.apiKey);
   },
 
   selectSourceImage: async () => {
@@ -611,6 +675,16 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       set({ errorMessage: baseURLError });
       return;
     }
+    const activeConfig = s.apiMode === "responses" ? s.responsesConfig : s.imagesConfig;
+    const concurrencyLimit = normalizeConcurrencyLimit(activeConfig.concurrencyLimit);
+    if (concurrencyLimit > 0) {
+      const activeCount = workspaceRunningCount(s, s.apiMode);
+      if (activeCount >= concurrencyLimit) {
+        const apiLabel = s.apiMode === "responses" ? "Responses API" : "Images API";
+        set({ errorMessage: `${apiLabel} 已达到并发限制 ${concurrencyLimit},请等待当前任务完成后再提交。` });
+        return;
+      }
+    }
     let editSourcePaths: string[] = [];
     if (s.mode === "edit") {
       editSourcePaths = s.sources.map((src) => src.path).filter(Boolean);
@@ -626,7 +700,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       }
     }
 
-    set({
+    const workspaceId = s.activeWorkspaceId;
+    const runPatch = {
       errorMessage: null,
       progress: null,
       lastLogLine: "",
@@ -634,6 +709,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       jobsTotal: 1,
       jobsCompleted: 0,
       runningJobs: [],
+    };
+    set({
+      ...runPatch,
+      workspaces: patchWorkspaceRuntime(s.workspaces, workspaceId, runPatch),
     });
 
     const maskDataURL = s.mode === "edit"
@@ -665,6 +744,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       transport: s.transport,
       apiMode: s.apiMode,
       noPromptRevision: s.noPromptRevision,
+      concurrencyLimit,
     };
 
     if (s.prompt.trim()) {
@@ -672,13 +752,18 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       set({ promptHistory: ph });
       try { localStorage.setItem("gptcodex.promptHistory", JSON.stringify(ph)); } catch {}
     }
-    set({ lastPayload: basePayload });
+    set({
+      lastPayload: basePayload,
+      workspaces: patchWorkspaceRuntime(get().workspaces, workspaceId, { lastPayload: basePayload }),
+    });
 
     // 单张生成。批量生图(batchCount>1)已下架 —— 上游中转站对并发不友好,
     // 多个 SSE 流并行常会被节流/截断。如果将来恢复,for 循环回来即可。
     const jobSeed = s.seed || 0;
     const p: backend.GenerateOptions = { ...basePayload, seed: jobSeed };
     void launchOneJob(s.mode, p, {
+      workspaceId,
+      apiMode: s.apiMode,
       size: s.size,
       quality: s.quality,
       outputFormat: s.outputFormat,
@@ -690,18 +775,27 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   cancel: async () => {
-    const ids = [...get().runningJobs];
+    const s = get();
+    const workspaceId = s.activeWorkspaceId;
+    const ids = [...s.runningJobs];
     // Cancel every concurrent job in the batch.
     for (const id of ids) {
       try { await wailsCancel(id); } catch { /* ignore */ }
       EventsOff(`progress:${id}`, `log:${id}`, `result:${id}`, `error:${id}`);
     }
-    set({
+    const nextMeta = { ...get().runningJobMeta };
+    for (const id of ids) delete nextMeta[id];
+    const runPatch = {
       isRunning: false,
       runningJobs: [],
       progress: null,
       jobsTotal: 0,
       jobsCompleted: 0,
+    };
+    set({
+      ...runPatch,
+      runningJobMeta: nextMeta,
+      workspaces: patchWorkspaceRuntime(get().workspaces, workspaceId, runPatch),
     });
   },
 
@@ -890,6 +984,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       batchCount: 1,
       sources: [],
       currentImageId: null,
+      runningJobIds: [],
+      jobsTotal: 0,
+      jobsCompleted: 0,
+      progress: null,
+      lastLogLine: "",
+      errorMessage: null,
+      lastPayload: null,
     };
     set({
       apiKey: activeKey, history: trimHistory(items), promptHistory, presets, theme, fontScale,
@@ -1309,6 +1410,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       batchCount: 1,
       sources: [],
       currentImageId: null,
+      runningJobIds: [],
+      jobsTotal: 0,
+      jobsCompleted: 0,
+      progress: null,
+      lastLogLine: "",
+      errorMessage: null,
+      lastPayload: null,
     };
     set({
       workspaces: [...persisted, newW],
@@ -1327,6 +1435,14 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       annotations: [],
       strokes: [],
       maskDataURL: null,
+      runningJobs: [],
+      jobsTotal: 0,
+      jobsCompleted: 0,
+      progress: null,
+      lastLogLine: "",
+      errorMessage: null,
+      isRunning: false,
+      lastPayload: null,
     });
   },
 
@@ -1339,6 +1455,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const newCurrent = target.currentImageId
       ? s.history.find((h) => h.id === target.currentImageId) ?? null
       : null;
+    const runningJobs = target.runningJobIds ?? [];
     set({
       workspaces: persisted,
       activeWorkspaceId: id,
@@ -1355,6 +1472,14 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       annotations: [],
       strokes: [],
       maskDataURL: null,
+      runningJobs,
+      jobsTotal: target.jobsTotal ?? 0,
+      jobsCompleted: target.jobsCompleted ?? 0,
+      progress: target.progress ?? null,
+      lastLogLine: target.lastLogLine ?? "",
+      errorMessage: target.errorMessage ?? null,
+      isRunning: runningJobs.length > 0,
+      lastPayload: target.lastPayload ?? null,
     });
   },
 
@@ -1364,6 +1489,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       s.pushToast("至少保留一个标签页", "warn");
       return;
     }
+    const closingJobIds = s.workspaces.find((w) => w.id === id)?.runningJobIds ?? [];
+    for (const jobId of closingJobIds) {
+      try { void wailsCancel(jobId); } catch { /* ignore */ }
+      EventsOff(`progress:${jobId}`, `log:${jobId}`, `result:${jobId}`, `error:${jobId}`);
+    }
+    const nextMeta = { ...s.runningJobMeta };
+    for (const jobId of closingJobIds) delete nextMeta[jobId];
     const remaining = s.workspaces.filter((w) => w.id !== id);
     // If we're closing the active one, switch to a neighbour first.
     if (s.activeWorkspaceId === id) {
@@ -1371,8 +1503,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const newCurrent = next.currentImageId
         ? s.history.find((h) => h.id === next.currentImageId) ?? null
         : null;
+      const runningJobs = next.runningJobIds ?? [];
       set({
         workspaces: remaining,
+        runningJobMeta: nextMeta,
         activeWorkspaceId: next.id,
         prompt: next.prompt,
         negativePrompt: next.negativePrompt,
@@ -1387,9 +1521,17 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         annotations: [],
         strokes: [],
         maskDataURL: null,
+        runningJobs,
+        jobsTotal: next.jobsTotal ?? 0,
+        jobsCompleted: next.jobsCompleted ?? 0,
+        progress: next.progress ?? null,
+        lastLogLine: next.lastLogLine ?? "",
+        errorMessage: next.errorMessage ?? null,
+        isRunning: runningJobs.length > 0,
+        lastPayload: next.lastPayload ?? null,
       });
     } else {
-      set({ workspaces: remaining });
+      set({ workspaces: remaining, runningJobMeta: nextMeta });
     }
   },
 
@@ -1591,6 +1733,8 @@ async function launchOneJob(
   mode: string,
   payload: backend.GenerateOptions,
   snapshot: {
+    workspaceId: string;
+    apiMode: APIModeValue;
     size: SizeValue;
     quality: QualityValue;
     outputFormat: OutputFormatValue;
@@ -1606,7 +1750,21 @@ async function launchOneJob(
       ? await wailsEdit(payload)
       : await wailsGenerate(payload);
     const jobId = started.jobId;
-    store.setState({ runningJobs: [...store.getState().runningJobs, jobId] });
+    store.setState((state) => {
+      const runtime = workspaceRuntimeFromState(state, snapshot.workspaceId);
+      const runningJobs = runtime.runningJobs.includes(jobId)
+        ? runtime.runningJobs
+        : [...runtime.runningJobs, jobId];
+      const patch: WorkspacePatch = { runningJobs };
+      return {
+        runningJobMeta: {
+          ...state.runningJobMeta,
+          [jobId]: { workspaceId: snapshot.workspaceId, apiMode: snapshot.apiMode },
+        },
+        workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, patch),
+        ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(patch) : {}),
+      } as Partial<StudioState>;
+    });
 
     let offProgress = () => {};
     let offLog = () => {};
@@ -1614,22 +1772,42 @@ async function launchOneJob(
     let offError = () => {};
     const cleanup = () => { offProgress(); offLog(); offResult(); offError(); };
     const removeFromRunning = () => {
-      const remaining = store.getState().runningJobs.filter((id) => id !== jobId);
-      const completed = store.getState().jobsCompleted + 1;
-      store.setState({
-        runningJobs: remaining,
-        jobsCompleted: completed,
-        isRunning: remaining.length > 0,
-        progress: remaining.length === 0 ? null : store.getState().progress,
+      let completed = 0;
+      let total = 0;
+      store.setState((state) => {
+        const runtime = workspaceRuntimeFromState(state, snapshot.workspaceId);
+        const remaining = runtime.runningJobs.filter((id) => id !== jobId);
+        completed = runtime.jobsCompleted + 1;
+        total = runtime.jobsTotal;
+        const patch: WorkspacePatch = {
+          runningJobs: remaining,
+          jobsCompleted: completed,
+          progress: remaining.length === 0 ? null : runtime.progress,
+        };
+        const nextMeta = { ...state.runningJobMeta };
+        delete nextMeta[jobId];
+        return {
+          runningJobMeta: nextMeta,
+          workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, patch),
+          ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(patch) : {}),
+        } as Partial<StudioState>;
       });
+      return { completed, total };
     };
 
     offProgress = EventsOn(`progress:${jobId}`, (p: ProgressInfo) => {
-      // Only show latest progress (any concurrent job). Sufficient for UX.
-      store.setState({ progress: p });
+      const patch: WorkspacePatch = { progress: p };
+      store.setState((state) => ({
+        workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, patch),
+        ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(patch) : {}),
+      } as Partial<StudioState>));
     });
     offLog = EventsOn(`log:${jobId}`, (line: string) => {
-      store.setState({ lastLogLine: line });
+      const patch: WorkspacePatch = { lastLogLine: line };
+      store.setState((state) => ({
+        workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, patch),
+        ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(patch) : {}),
+      } as Partial<StudioState>));
     });
 
     const startedAt = Date.now();
@@ -1671,17 +1849,20 @@ async function launchOneJob(
         };
         persistHistoryItem(item).catch(() => undefined);
         persistHistoryFullImage(item.id, r.imageB64).catch(() => undefined);
-        // Always set the latest result as currentImage so the canvas updates
-        // even when multiple jobs land within the same React tick.
         const trimmed = trimHistory([item, ...store.getState().history]);
-        store.setState({
-          currentImage: fullItem,
+        store.setState((state) => ({
           history: trimmed,
-          maskDataURL: null,
-          annotations: [],
-          tool: "pan",
           recentDurations: rd,
-        });
+          workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, { currentImageId: item.id }),
+          ...(state.activeWorkspaceId === snapshot.workspaceId
+            ? {
+                currentImage: fullItem,
+                maskDataURL: null,
+                annotations: [],
+                tool: "pan",
+              }
+            : {}),
+        } as Partial<StudioState>));
         persistTrimmedHistory(trimmed);
         // 桌面通知 —— 点击拉前台 + 直达详情抽屉
         if (willNotify) {
@@ -1689,8 +1870,9 @@ async function launchOneJob(
             store.getState().openResultDetail(fullItem);
           });
         }
-        const total = store.getState().jobsTotal;
-        const completedAfter = store.getState().jobsCompleted + 1;
+        const runtime = workspaceRuntimeFromState(store.getState(), snapshot.workspaceId);
+        const total = runtime.jobsTotal;
+        const completedAfter = runtime.jobsCompleted + 1;
         store.getState().pushToast(
           total > 1
             ? `已完成 (${completedAfter}/${total}) · ${elapsedSec.toFixed(0)}s`
@@ -1701,21 +1883,36 @@ async function launchOneJob(
         );
         removeFromRunning();
       } catch (err: any) {
-        store.setState({ errorMessage: `处理结果失败:${err?.message ?? err}` });
+        const patch: WorkspacePatch = { errorMessage: `处理结果失败:${err?.message ?? err}` };
+        store.setState((state) => ({
+          workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, patch),
+          ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(patch) : {}),
+        } as Partial<StudioState>));
         removeFromRunning();
       }
       })();
     });
     offError = EventsOn(`error:${jobId}`, (e: { message: string }) => {
       cleanup();
-      store.setState({ errorMessage: e?.message ?? "未知错误" });
+      const patch: WorkspacePatch = { errorMessage: e?.message ?? "未知错误" };
+      store.setState((state) => ({
+        workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, patch),
+        ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(patch) : {}),
+      } as Partial<StudioState>));
       removeFromRunning();
     });
   } catch (e: any) {
-    store.setState({
+    const patch: WorkspacePatch = {
       errorMessage: `提交失败:${e?.message ?? e}`,
-      isRunning: false,
-    });
+      runningJobs: [],
+      progress: null,
+      jobsTotal: 0,
+      jobsCompleted: 0,
+    };
+    store.setState((state) => ({
+      workspaces: patchWorkspaceRuntime(state.workspaces, snapshot.workspaceId, patch),
+      ...(state.activeWorkspaceId === snapshot.workspaceId ? activeRuntimePatch(patch) : {}),
+    } as Partial<StudioState>));
   }
 }
 
@@ -1746,6 +1943,13 @@ function saveActiveWorkspaceSnapshot(s: StudioState): Workspace[] {
       batchCount: s.batchCount,
       sources: s.sources,
       currentImageId: s.currentImage?.id ?? null,
+      runningJobIds: s.runningJobs,
+      jobsTotal: s.jobsTotal,
+      jobsCompleted: s.jobsCompleted,
+      progress: s.progress,
+      lastLogLine: s.lastLogLine,
+      errorMessage: s.errorMessage,
+      lastPayload: s.lastPayload,
     };
   });
 }

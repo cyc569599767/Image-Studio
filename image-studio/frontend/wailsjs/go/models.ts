@@ -18,6 +18,7 @@ export namespace backend {
 	    transport: string;
 	    apiMode: string;
 	    noPromptRevision: boolean;
+	    concurrencyLimit: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateOptions(source);
@@ -42,6 +43,7 @@ export namespace backend {
 	        this.transport = source["transport"];
 	        this.apiMode = source["apiMode"];
 	        this.noPromptRevision = source["noPromptRevision"];
+	        this.concurrencyLimit = source["concurrencyLimit"];
 	    }
 	}
 	export class PromptOptimizeOptions {
