@@ -383,7 +383,15 @@ Android 保存逻辑与桌面端不同:前端会优先调用壳层注入的 `win
 
 - [**linux.do**](https://linux.do/) —— 感谢 L 站及其社区为项目开发与交流提供的支持与启发。
 
-灵感来自实际使用中频繁被中转站 524 截断的痛苦经历。
+### 赞助商
+
+<p align="center">
+  <a href="https://www.fhl.mom"><img src="./docs/%E8%B5%9E%E5%8A%A9-www.FHL.mom.png" alt="赞助商 · www.fhl.mom" width="720"></a>
+  <br /><br />
+  <a href="https://gptcodex.top"><img src="./docs/%E8%B5%9E%E5%8A%A9-GPTCODEX.top.png" alt="赞助商 · gptcodex.top" width="720"></a>
+  <br /><br />
+  <a href="https://muxueai.pro"><img src="./docs/%E8%B5%9E%E5%8A%A9-muxueai.pro.png" alt="赞助商 · muxueai.pro" width="720"></a>
+</p>
 
 ---
 
