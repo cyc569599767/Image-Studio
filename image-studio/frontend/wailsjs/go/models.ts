@@ -3,6 +3,7 @@ export namespace backend {
 	export class GenerateOptions {
 	    apiKey: string;
 	    mode: string;
+	    requestedJobId: string;
 	    prompt: string;
 	    size: string;
 	    quality: string;
@@ -28,6 +29,7 @@ export namespace backend {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.apiKey = source["apiKey"];
 	        this.mode = source["mode"];
+	        this.requestedJobId = source["requestedJobId"];
 	        this.prompt = source["prompt"];
 	        this.size = source["size"];
 	        this.quality = source["quality"];

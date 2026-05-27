@@ -457,6 +457,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const basePayload: backend.GenerateOptions = {
       apiKey: s.apiKey,
       mode: s.mode,
+      requestedJobId: "",
       prompt: augmentedPrompt,
       size: resolvedSize,
       quality: s.quality,
