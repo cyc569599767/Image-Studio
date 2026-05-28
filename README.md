@@ -51,7 +51,7 @@ Image Studio 面向 OpenAI 兼容图像上游，解决长时间图像推理在 C
 | 多 workspace | 每个标签独立保存 prompt、参数、源图与当前画板状态。 |
 | 平台化 UI | macOS Apple 风格、Windows Fluent 风格、Linux 通用桌面风格、Android Material 3 phone/pad 自适应壳层。 |
 | 本地数据 | API Key、历史、图片和日志默认都保存在本机；外部请求只发往你配置的上游 BASE_URL。 |
-### 可以使用「不优化提示词」开关。细节见 no-prompt-revision。
+### 可以使用「不优化提示词」开关。细节见 [no-prompt-revision](./docs/no-prompt-revision/README.md)。
 ## 安装
 
 稳定版本到 [Releases](https://github.com/RoseKhlifa/Image-Studio/releases) 下载。当前发布链路会产出:
